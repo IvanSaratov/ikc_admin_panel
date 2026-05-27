@@ -1,0 +1,33 @@
+.DS_Store
+
+# Local databases and generated data
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+docs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Logs and temp files
+*.log
+tmp/
+temp/
