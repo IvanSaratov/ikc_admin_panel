@@ -113,6 +113,32 @@ func (q *Queries) GetProgram(ctx context.Context, id int64) (Program, error) {
 	return i, err
 }
 
+const getProgramByCode = `-- name: GetProgramByCode :one
+SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
+FROM programs
+WHERE code = ?
+`
+
+// Used by the requests service to resolve a program code from an XLSX row
+// to a program_id when importing/staging the row. Returns sql.ErrNoRows
+// when the code is unknown so the caller can mark the request_row invalid.
+func (q *Queries) GetProgramByCode(ctx context.Context, code string) (Program, error) {
+	row := q.db.QueryRowContext(ctx, getProgramByCode, code)
+	var i Program
+	err := row.Scan(
+		&i.ID,
+		&i.ProgramGroupID,
+		&i.Code,
+		&i.Name,
+		&i.DefaultHours,
+		&i.MoodleCourseID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getProgramByID = `-- name: GetProgramByID :one
 SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
 FROM programs

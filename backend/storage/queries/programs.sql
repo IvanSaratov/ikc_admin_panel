@@ -14,6 +14,14 @@ SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status
 FROM programs
 WHERE id = ?;
 
+-- name: GetProgramByCode :one
+-- Used by the requests service to resolve a program code from an XLSX row
+-- to a program_id when importing/staging the row. Returns sql.ErrNoRows
+-- when the code is unknown so the caller can mark the request_row invalid.
+SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
+FROM programs
+WHERE code = ?;
+
 -- name: CreateProgram :one
 INSERT INTO programs (
   program_group_id,
