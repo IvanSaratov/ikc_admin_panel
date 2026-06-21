@@ -33,3 +33,23 @@ SET status = ?,
     updated_at = ?
 WHERE id = ?
 RETURNING id, code, name, status, created_at, updated_at;
+
+-- name: GetGroupByID :one
+SELECT id, code, name, status, created_at, updated_at
+FROM program_groups
+WHERE id = ?;
+
+-- name: UpdateGroup :one
+UPDATE program_groups
+SET code = ?,
+    name = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id, code, name, status, created_at, updated_at;
+
+-- name: DeactivateGroup :one
+UPDATE program_groups
+SET status = 'inactive',
+    updated_at = ?
+WHERE id = ?
+RETURNING id, code, name, status, created_at, updated_at;

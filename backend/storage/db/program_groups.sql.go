@@ -47,6 +47,53 @@ func (q *Queries) CreateProgramGroup(ctx context.Context, arg CreateProgramGroup
 	return i, err
 }
 
+const deactivateGroup = `-- name: DeactivateGroup :one
+UPDATE program_groups
+SET status = 'inactive',
+    updated_at = ?
+WHERE id = ?
+RETURNING id, code, name, status, created_at, updated_at
+`
+
+type DeactivateGroupParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+func (q *Queries) DeactivateGroup(ctx context.Context, arg DeactivateGroupParams) (ProgramGroup, error) {
+	row := q.db.QueryRowContext(ctx, deactivateGroup, arg.UpdatedAt, arg.ID)
+	var i ProgramGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getGroupByID = `-- name: GetGroupByID :one
+SELECT id, code, name, status, created_at, updated_at
+FROM program_groups
+WHERE id = ?
+`
+
+func (q *Queries) GetGroupByID(ctx context.Context, id int64) (ProgramGroup, error) {
+	row := q.db.QueryRowContext(ctx, getGroupByID, id)
+	var i ProgramGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getProgramGroup = `-- name: GetProgramGroup :one
 SELECT id, code, name, status, created_at, updated_at
 FROM program_groups
@@ -119,6 +166,41 @@ type SetProgramGroupStatusParams struct {
 
 func (q *Queries) SetProgramGroupStatus(ctx context.Context, arg SetProgramGroupStatusParams) (ProgramGroup, error) {
 	row := q.db.QueryRowContext(ctx, setProgramGroupStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	var i ProgramGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateGroup = `-- name: UpdateGroup :one
+UPDATE program_groups
+SET code = ?,
+    name = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id, code, name, status, created_at, updated_at
+`
+
+type UpdateGroupParams struct {
+	Code      string `json:"code"`
+	Name      string `json:"name"`
+	UpdatedAt string `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+func (q *Queries) UpdateGroup(ctx context.Context, arg UpdateGroupParams) (ProgramGroup, error) {
+	row := q.db.QueryRowContext(ctx, updateGroup,
+		arg.Code,
+		arg.Name,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	var i ProgramGroup
 	err := row.Scan(
 		&i.ID,

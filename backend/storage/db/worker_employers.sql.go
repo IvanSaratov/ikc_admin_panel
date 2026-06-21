@@ -51,6 +51,34 @@ func (q *Queries) CreateWorkerEmployer(ctx context.Context, arg CreateWorkerEmpl
 	return i, err
 }
 
+const deactivateAssignment = `-- name: DeactivateAssignment :one
+UPDATE worker_employers
+SET status = 'inactive',
+    updated_at = ?
+WHERE id = ?
+RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+`
+
+type DeactivateAssignmentParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+func (q *Queries) DeactivateAssignment(ctx context.Context, arg DeactivateAssignmentParams) (WorkerEmployer, error) {
+	row := q.db.QueryRowContext(ctx, deactivateAssignment, arg.UpdatedAt, arg.ID)
+	var i WorkerEmployer
+	err := row.Scan(
+		&i.ID,
+		&i.WorkerID,
+		&i.EmployerID,
+		&i.CurrentPosition,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorkerEmployer = `-- name: GetWorkerEmployer :one
 SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
 FROM worker_employers
@@ -223,6 +251,42 @@ type SetWorkerEmployerStatusParams struct {
 
 func (q *Queries) SetWorkerEmployerStatus(ctx context.Context, arg SetWorkerEmployerStatusParams) (WorkerEmployer, error) {
 	row := q.db.QueryRowContext(ctx, setWorkerEmployerStatus, arg.Status, arg.UpdatedAt, arg.ID)
+	var i WorkerEmployer
+	err := row.Scan(
+		&i.ID,
+		&i.WorkerID,
+		&i.EmployerID,
+		&i.CurrentPosition,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateAssignment = `-- name: UpdateAssignment :one
+UPDATE worker_employers
+SET employer_id = ?,
+    current_position = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+`
+
+type UpdateAssignmentParams struct {
+	EmployerID      int64  `json:"employer_id"`
+	CurrentPosition string `json:"current_position"`
+	UpdatedAt       string `json:"updated_at"`
+	ID              int64  `json:"id"`
+}
+
+func (q *Queries) UpdateAssignment(ctx context.Context, arg UpdateAssignmentParams) (WorkerEmployer, error) {
+	row := q.db.QueryRowContext(ctx, updateAssignment,
+		arg.EmployerID,
+		arg.CurrentPosition,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	var i WorkerEmployer
 	err := row.Scan(
 		&i.ID,

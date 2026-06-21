@@ -46,3 +46,8 @@ SET last_name = ?,
     updated_at = ?
 WHERE id = ?
 RETURNING id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at;
+
+-- name: GetWorkerByID :one
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+FROM workers
+WHERE id = ?;

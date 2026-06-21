@@ -90,6 +90,30 @@ func (q *Queries) GetWorker(ctx context.Context, id int64) (Worker, error) {
 	return i, err
 }
 
+const getWorkerByID = `-- name: GetWorkerByID :one
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+FROM workers
+WHERE id = ?
+`
+
+func (q *Queries) GetWorkerByID(ctx context.Context, id int64) (Worker, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerByID, id)
+	var i Worker
+	err := row.Scan(
+		&i.ID,
+		&i.LastName,
+		&i.FirstName,
+		&i.MiddleName,
+		&i.Snils,
+		&i.SnilsNormalized,
+		&i.Email,
+		&i.BirthDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorkerByNormalizedSNILS = `-- name: GetWorkerByNormalizedSNILS :one
 SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
 FROM workers

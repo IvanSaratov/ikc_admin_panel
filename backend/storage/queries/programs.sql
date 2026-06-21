@@ -45,3 +45,15 @@ SET status = ?,
     updated_at = ?
 WHERE id = ?
 RETURNING id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at;
+
+-- name: GetProgramByID :one
+SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
+FROM programs
+WHERE id = ?;
+
+-- name: DeactivateProgram :one
+UPDATE programs
+SET status = 'inactive',
+    updated_at = ?
+WHERE id = ?
+RETURNING id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at;

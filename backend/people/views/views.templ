@@ -17,6 +17,7 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 					</div>
 					<div class="card-body">
 						<form method="post" action="/workers" class="row g-2 align-items-end">
+							// TODO(f3): add csrfField
 							<div class="col-12 col-md-2">
 								<label class="form-label" for="worker-last-name">Last name</label>
 								<input id="worker-last-name" class="form-control" name="last_name"/>
@@ -49,19 +50,25 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 									<th>Name</th>
 									<th>SNILS</th>
 									<th>Email</th>
+									<th class="text-end">Actions</th>
 								</tr>
 							</thead>
 							<tbody>
 								for _, worker := range workers {
 									<tr>
-										<td>{ worker.LastName } { worker.FirstName }</td>
+										<td>
+											<a href={ templ.SafeURL(fmt.Sprintf("/workers/%d", worker.ID)) } class="link-reset">{ worker.LastName } { worker.FirstName }</a>
+										</td>
 										<td>{ worker.Snils }</td>
 										<td>{ worker.Email }</td>
+										<td class="text-end">
+											<a class="btn btn-sm btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/workers/%d/edit", worker.ID)) }>Edit</a>
+										</td>
 									</tr>
 								}
 								if len(workers) == 0 {
 									<tr>
-										<td colspan="3" class="text-secondary">No workers yet.</td>
+										<td colspan="4" class="text-secondary">No workers yet.</td>
 									</tr>
 								}
 							</tbody>
@@ -76,6 +83,7 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 					</div>
 					<div class="card-body">
 						<form method="post" action="/workers/assignments" class="row g-2 align-items-end">
+							// TODO(f3): add csrfField
 							<div class="col-12 col-md-4">
 								<label class="form-label" for="assignment-worker">Worker</label>
 								<select id="assignment-worker" class="form-select" name="worker_id">
@@ -132,4 +140,119 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 			</div>
 		</div>
 	}
+}
+
+templ Edit(worker db.Worker) {
+	@layouts.Shell("Edit worker", "workers") {
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Edit worker</h3>
+			</div>
+			<div class="card-body">
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/workers/%d", worker.ID)) } class="row g-2 align-items-end">
+					// TODO(f3): add csrfField
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="worker-last-name">Last name</label>
+						<input id="worker-last-name" class="form-control" name="last_name" value={ worker.LastName }/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="worker-first-name">First name</label>
+						<input id="worker-first-name" class="form-control" name="first_name" value={ worker.FirstName }/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="worker-middle-name">Middle name</label>
+						<input id="worker-middle-name" class="form-control" name="middle_name" value={ worker.MiddleName.String }/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="worker-snils">SNILS</label>
+						<input id="worker-snils" class="form-control" name="snils" value={ worker.Snils }/>
+					</div>
+					<div class="col-12 col-md-3">
+						<label class="form-label" for="worker-email">Email</label>
+						<input id="worker-email" class="form-control" name="email" type="email" value={ worker.Email }/>
+					</div>
+					<div class="col-12 col-md-auto">
+						<button class="btn btn-primary" type="submit">Save</button>
+						<a class="btn btn-link" href="/workers">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+templ Detail(worker db.Worker, assignments []db.WorkerEmployer, employers []db.Employer) {
+	@layouts.Shell("Worker", "workers") {
+		<div class="card mb-3">
+			<div class="card-header">
+				<h3 class="card-title">{ worker.LastName } { worker.FirstName } { worker.MiddleName.String }</h3>
+			</div>
+			<div class="card-body">
+				<dl class="row mb-0">
+					<dt class="col-sm-2">SNILS</dt>
+					<dd class="col-sm-10">{ worker.Snils }</dd>
+					<dt class="col-sm-2">Normalized</dt>
+					<dd class="col-sm-10">{ worker.SnilsNormalized }</dd>
+					<dt class="col-sm-2">Email</dt>
+					<dd class="col-sm-10">{ worker.Email }</dd>
+					<dt class="col-sm-2">Birth date</dt>
+					<dd class="col-sm-10">{ worker.BirthDate.String }</dd>
+				</dl>
+			</div>
+			<div class="card-footer text-end">
+				<a class="btn btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/workers/%d/edit", worker.ID)) }>Edit</a>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Employer assignments</h3>
+			</div>
+			<div class="table-responsive">
+				<table class="table table-vcenter card-table">
+					<thead>
+						<tr>
+							<th>Employer</th>
+							<th>Position</th>
+							<th>Status</th>
+							<th class="text-end">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, a := range assignments {
+							@assignmentRow(a, employers)
+						}
+						if len(assignments) == 0 {
+							<tr>
+								<td colspan="4" class="text-secondary">No employer assignments yet.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ assignmentRow(a db.WorkerEmployer, employers []db.Employer) {
+	<tr>
+		<td>
+			for _, e := range employers {
+				if e.ID == a.EmployerID {
+					<a href={ templ.SafeURL(fmt.Sprintf("/employers/%d", e.ID)) } class="link-reset">{ e.CanonicalName }</a>
+				}
+			}
+		</td>
+		<td>{ a.CurrentPosition }</td>
+		<td>{ a.Status }</td>
+		<td class="text-end">
+			if a.Status == "active" {
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/workers/assignments/%d/deactivate", a.ID)) } class="d-inline">
+					// TODO(f3): add csrfField
+					<button class="btn btn-sm btn-warning" type="submit">Deactivate</button>
+				</form>
+			} else {
+				<span class="text-secondary">inactive</span>
+			}
+		</td>
+	</tr>
 }

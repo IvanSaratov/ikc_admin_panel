@@ -49,6 +49,35 @@ func (q *Queries) CreateEmployer(ctx context.Context, arg CreateEmployerParams) 
 	return i, err
 }
 
+const deactivateEmployer = `-- name: DeactivateEmployer :one
+UPDATE employers
+SET updated_at = ?
+WHERE id = ?
+RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at
+`
+
+type DeactivateEmployerParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+// employers has no status column on MVP schema; "deactivate" currently
+// only bumps updated_at so the audit entry has a real diff to record.
+// Future F2 work may add an `is_active` column.
+func (q *Queries) DeactivateEmployer(ctx context.Context, arg DeactivateEmployerParams) (Employer, error) {
+	row := q.db.QueryRowContext(ctx, deactivateEmployer, arg.UpdatedAt, arg.ID)
+	var i Employer
+	err := row.Scan(
+		&i.ID,
+		&i.Inn,
+		&i.InnNormalized,
+		&i.CanonicalName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEmployer = `-- name: GetEmployer :one
 SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
 FROM employers
@@ -57,6 +86,26 @@ WHERE id = ?
 
 func (q *Queries) GetEmployer(ctx context.Context, id int64) (Employer, error) {
 	row := q.db.QueryRowContext(ctx, getEmployer, id)
+	var i Employer
+	err := row.Scan(
+		&i.ID,
+		&i.Inn,
+		&i.InnNormalized,
+		&i.CanonicalName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmployerByID = `-- name: GetEmployerByID :one
+SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
+FROM employers
+WHERE id = ?
+`
+
+func (q *Queries) GetEmployerByID(ctx context.Context, id int64) (Employer, error) {
+	row := q.db.QueryRowContext(ctx, getEmployerByID, id)
 	var i Employer
 	err := row.Scan(
 		&i.ID,

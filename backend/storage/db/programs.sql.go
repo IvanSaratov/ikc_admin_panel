@@ -60,6 +60,36 @@ func (q *Queries) CreateProgram(ctx context.Context, arg CreateProgramParams) (P
 	return i, err
 }
 
+const deactivateProgram = `-- name: DeactivateProgram :one
+UPDATE programs
+SET status = 'inactive',
+    updated_at = ?
+WHERE id = ?
+RETURNING id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
+`
+
+type DeactivateProgramParams struct {
+	UpdatedAt string `json:"updated_at"`
+	ID        int64  `json:"id"`
+}
+
+func (q *Queries) DeactivateProgram(ctx context.Context, arg DeactivateProgramParams) (Program, error) {
+	row := q.db.QueryRowContext(ctx, deactivateProgram, arg.UpdatedAt, arg.ID)
+	var i Program
+	err := row.Scan(
+		&i.ID,
+		&i.ProgramGroupID,
+		&i.Code,
+		&i.Name,
+		&i.DefaultHours,
+		&i.MoodleCourseID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getProgram = `-- name: GetProgram :one
 SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
 FROM programs
@@ -68,6 +98,29 @@ WHERE id = ?
 
 func (q *Queries) GetProgram(ctx context.Context, id int64) (Program, error) {
 	row := q.db.QueryRowContext(ctx, getProgram, id)
+	var i Program
+	err := row.Scan(
+		&i.ID,
+		&i.ProgramGroupID,
+		&i.Code,
+		&i.Name,
+		&i.DefaultHours,
+		&i.MoodleCourseID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProgramByID = `-- name: GetProgramByID :one
+SELECT id, program_group_id, code, name, default_hours, moodle_course_id, status, created_at, updated_at
+FROM programs
+WHERE id = ?
+`
+
+func (q *Queries) GetProgramByID(ctx context.Context, id int64) (Program, error) {
+	row := q.db.QueryRowContext(ctx, getProgramByID, id)
 	var i Program
 	err := row.Scan(
 		&i.ID,
