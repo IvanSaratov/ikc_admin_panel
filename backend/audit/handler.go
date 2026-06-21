@@ -1,6 +1,9 @@
 package audit
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -69,8 +72,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		EntityType:  nullIfEmpty(entityType),
 		CreatedFrom: nullIfEmpty(createdFrom),
 		CreatedTo:   nullIfEmpty(createdTo),
-		Limit:       PageSize,
-		Offset:      offset,
+		Lim:         PageSize,
+		Off:         offset,
 	})
 	if err != nil {
 		http.Error(w, "list action_log: "+err.Error(), http.StatusInternalServerError)
@@ -114,10 +117,31 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	// embed a second shell layout inside the page. The non-HTMX path
 	// renders the full page (filter form + table + shell).
 	if r.Header.Get(HXRequestHeader) == "true" {
-		views.TableFragment(r, pageData, login).Render(ctx, w)
+		// For HTMX outerHTML swap into #audit-table-wrap the response
+		// must itself BE the wrapper div so the new content lands
+		// inside the same id (replacing the old one).
+		writeTableWrap(w, views.TableFragment(r, pageData, login))
 		return
 	}
 	views.List(r, pageData, login).Render(ctx, w)
+}
+
+// writeTableWrap emits a minimal #audit-table-wrap wrapper around the
+// given fragment. Used only on the HTMX response path so the swap
+// target stays consistent with the initial render.
+func writeTableWrap(w http.ResponseWriter, inner interface {
+	Render(context.Context, io.Writer) error
+}) {
+	// Render inner to a buffer first, then write the wrapper + inner.
+	var buf bytes.Buffer
+	if err := inner.Render(context.Background(), &buf); err != nil {
+		http.Error(w, "render fragment: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = io.WriteString(w, `<div id="audit-table-wrap">`)
+	_, _ = w.Write(buf.Bytes())
+	_, _ = io.WriteString(w, `</div>`)
 }
 
 // parsePage coerces the ?page= query param to a positive 1-based page
@@ -134,14 +158,14 @@ func parsePage(raw string) int64 {
 	return n
 }
 
-// nullIfEmpty converts an empty filter string into an untyped nil so
-// sqlc-generated queries treat the parameter as "no constraint". We
-// can't use sql.NullString because the generated params are interface{}
-// (sqlc.narg expansion). Passing a typed nil would also work, but the
-// untyped nil makes intent obvious to future readers.
+// nullIfEmpty normalises an empty filter string into the SQL sentinel
+// "" — the WHERE clause in ListActionLogsFiltered / CountActionLogsFiltered
+// uses `length(filter) = 0 OR col <op> filter` so an empty string drops
+// the constraint. Returning the original string when non-empty
+// preserves exact-match semantics for `actor = ?` / `entity_type = ?`.
 func nullIfEmpty(s string) interface{} {
 	if s == "" {
-		return nil
+		return ""
 	}
 	return s
 }

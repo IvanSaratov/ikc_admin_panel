@@ -119,15 +119,16 @@ templ List(r *http.Request, p Page, login string) {
 	}
 }
 
-// TableFragment renders only the table + pagination footer wrapped in
-// the #audit-table-wrap div. The handler returns this on HTMX requests
-// so the swap does not embed a second shell layout inside the page.
+// TableFragment renders only the table + pagination footer. The
+// handler returns this on HTMX requests so the swap does not embed a
+// second shell layout inside the page. The caller (handler for HTMX
+// path, List template for the full page) is responsible for wrapping
+// the result in `<div id="audit-table-wrap">`.
 //
 // It is exported (capitalised) because the handler needs to call it
 // when the HX-Request header is present. On the initial render the
 // List template embeds it inline via @TableFragment.
 templ TableFragment(r *http.Request, p Page, login string) {
-	<div id="audit-table-wrap">
 	<div class="table-responsive">
 		<table class="table table-vcenter card-table">
 			<thead>
@@ -191,7 +192,6 @@ templ TableFragment(r *http.Request, p Page, login string) {
 				>Next</a>
 			}
 		</div>
-	</div>
 	</div>
 }
 
