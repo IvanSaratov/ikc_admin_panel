@@ -37,6 +37,7 @@ type Employer struct {
 	CanonicalName string `json:"canonical_name"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
+	Status        string `json:"status"`
 }
 
 type GenerationRun struct {
@@ -190,6 +191,7 @@ type Worker struct {
 	BirthDate       sql.NullString `json:"birth_date"`
 	CreatedAt       string         `json:"created_at"`
 	UpdatedAt       string         `json:"updated_at"`
+	Status          string         `json:"status"`
 }
 
 type WorkerEmployer struct {

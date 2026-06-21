@@ -244,3 +244,59 @@ VALUES (
   '2026-05-27T00:00:00Z',
   '2026-05-27T00:00:00Z'
 );
+
+-- 002b additions: status defaults + actor CHECK relax.
+
+-- name: test_employer_status_defaults_to_active
+-- Positive control: INSERT without status should succeed and default to 'active'.
+INSERT INTO employers (
+  inn, inn_normalized, canonical_name, created_at, updated_at
+)
+VALUES (
+  '7700000001', '7700000001', 'Default Status Co',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_employer_status_rejects_invalid
+-- Status must be 'active' or 'inactive'.
+INSERT INTO employers (
+  inn, inn_normalized, canonical_name, status, created_at, updated_at
+)
+VALUES (
+  '7700000002', '7700000002', 'Bad Status Co', 'archived',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_worker_status_defaults_to_active
+INSERT INTO workers (
+  last_name, first_name, snils, snils_normalized, email,
+  created_at, updated_at
+)
+VALUES (
+  'Defaultov', 'Worker', '111-222-333 44', '11122233344',
+  'default-status@example.test',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_worker_status_rejects_invalid
+INSERT INTO workers (
+  last_name, first_name, snils, snils_normalized, email, status,
+  created_at, updated_at
+)
+VALUES (
+  'Badov', 'Worker', '111-222-333 55', '11122233355',
+  'bad-status@example.test', 'archived',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_action_log_actor_accepts_operator_login
+-- Positive control: 002b relaxed actor CHECK to length-bounded only,
+-- so real operator logins (e.g. 'admin') are accepted.
+INSERT INTO action_log (
+  actor, action, entity_type, entity_id, details, created_at
+)
+VALUES (
+  'admin', 'login.success', 'session', NULL,
+  '{"ip":"127.0.0.1"}',
+  '2026-05-27T00:00:00Z'
+);

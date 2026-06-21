@@ -2,6 +2,7 @@ package employers_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -119,4 +120,75 @@ func TestUpdateEmployer_DuplicateINN_MapsToFieldError(t *testing.T) {
 	if fe["inn"] == "" {
 		t.Errorf("expected inn field error, got %v", fe)
 	}
+}
+
+func TestDeactivateEmployerSetsStatusAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	service, queries := newServiceWithQueries(t)
+	ctx := context.Background()
+	created, err := service.Create(ctx, employers.Form{INN: "7700000000", CanonicalName: "ООО Ромашка"})
+	if err != nil {
+		t.Fatalf("create employer: %v", err)
+	}
+	if created.Status != "active" {
+		t.Fatalf("new employer status = %q, want active", created.Status)
+	}
+
+	deactivated, err := service.Deactivate(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("first deactivate: %v", err)
+	}
+	if deactivated.Status != "inactive" {
+		t.Errorf("after deactivate status = %q, want inactive", deactivated.Status)
+	}
+
+	// Second call must be a no-op (same row, no error).
+	again, err := service.Deactivate(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("second deactivate: %v", err)
+	}
+	if again.Status != "inactive" {
+		t.Errorf("after idempotent deactivate status = %q, want inactive", again.Status)
+	}
+
+	// Audit: exactly one deactivate event for this employer.
+	entries := listActionLogs(t, queries, created.ID)
+	deactivateCount := 0
+	for _, e := range entries {
+		if e.Action == "deactivate" {
+			deactivateCount++
+		}
+	}
+	if deactivateCount != 1 {
+		t.Errorf("deactivate audit count = %d, want 1 (idempotent)", deactivateCount)
+	}
+}
+
+func newServiceWithQueries(t *testing.T) (*employers.Service, *storagedb.Queries) {
+	t.Helper()
+	ctx := context.Background()
+	database, err := storage.Open(ctx, filepath.Join(t.TempDir(), "mintrud-test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	if err := storage.Migrate(database); err != nil {
+		t.Fatalf("migrate db: %v", err)
+	}
+	queries := storagedb.New(database)
+	auditSvc := audit.NewService(queries)
+	return employers.NewService(queries, auditSvc), queries
+}
+
+func listActionLogs(t *testing.T, q *storagedb.Queries, entityID int64) []storagedb.ActionLog {
+	t.Helper()
+	rows, err := q.ListActionLogsByEntity(context.Background(), storagedb.ListActionLogsByEntityParams{
+		EntityType: "employer",
+		EntityID:   sql.NullInt64{Int64: entityID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("list action logs: %v", err)
+	}
+	return rows
 }

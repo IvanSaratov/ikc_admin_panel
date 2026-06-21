@@ -2,6 +2,7 @@ PRAGMA foreign_keys = ON;
 
 .read migrations/001_initial_schema.sql
 .read migrations/002_schema_cleanup.sql
+.read migrations/003_status_and_actor_relax.sql
 
 INSERT INTO program_groups (code, name, status, created_at, updated_at)
 VALUES ('A', 'Direction A', 'active', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z');

@@ -18,7 +18,7 @@ INSERT INTO employers (
   updated_at
 )
 VALUES (?, ?, ?, ?, ?)
-RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at
+RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 `
 
 type CreateEmployerParams struct {
@@ -45,15 +45,16 @@ func (q *Queries) CreateEmployer(ctx context.Context, arg CreateEmployerParams) 
 		&i.CanonicalName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const deactivateEmployer = `-- name: DeactivateEmployer :one
 UPDATE employers
-SET updated_at = ?
-WHERE id = ?
-RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at
+SET status = 'inactive', updated_at = ?
+WHERE id = ? AND status = 'active'
+RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 `
 
 type DeactivateEmployerParams struct {
@@ -61,9 +62,9 @@ type DeactivateEmployerParams struct {
 	ID        int64  `json:"id"`
 }
 
-// employers has no status column on MVP schema; "deactivate" currently
-// only bumps updated_at so the audit entry has a real diff to record.
-// Future F2 work may add an `is_active` column.
+// After 003 added `status` to employers, this flips the soft-delete flag
+// and records the transition in the audit log. Idempotent: a no-op when
+// status is already 'inactive' (no rows updated).
 func (q *Queries) DeactivateEmployer(ctx context.Context, arg DeactivateEmployerParams) (Employer, error) {
 	row := q.db.QueryRowContext(ctx, deactivateEmployer, arg.UpdatedAt, arg.ID)
 	var i Employer
@@ -74,12 +75,13 @@ func (q *Queries) DeactivateEmployer(ctx context.Context, arg DeactivateEmployer
 		&i.CanonicalName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getEmployer = `-- name: GetEmployer :one
-SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
+SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 FROM employers
 WHERE id = ?
 `
@@ -94,12 +96,13 @@ func (q *Queries) GetEmployer(ctx context.Context, id int64) (Employer, error) {
 		&i.CanonicalName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getEmployerByID = `-- name: GetEmployerByID :one
-SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
+SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 FROM employers
 WHERE id = ?
 `
@@ -114,12 +117,13 @@ func (q *Queries) GetEmployerByID(ctx context.Context, id int64) (Employer, erro
 		&i.CanonicalName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getEmployerByNormalizedINN = `-- name: GetEmployerByNormalizedINN :one
-SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
+SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 FROM employers
 WHERE inn_normalized = ?
 `
@@ -134,12 +138,13 @@ func (q *Queries) GetEmployerByNormalizedINN(ctx context.Context, innNormalized 
 		&i.CanonicalName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const listEmployers = `-- name: ListEmployers :many
-SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
+SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 FROM employers
 ORDER BY canonical_name
 `
@@ -160,6 +165,7 @@ func (q *Queries) ListEmployers(ctx context.Context) ([]Employer, error) {
 			&i.CanonicalName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -175,7 +181,7 @@ func (q *Queries) ListEmployers(ctx context.Context) ([]Employer, error) {
 }
 
 const searchEmployers = `-- name: SearchEmployers :many
-SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at
+SELECT id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 FROM employers
 WHERE canonical_name LIKE ? OR inn_normalized LIKE ?
 ORDER BY canonical_name
@@ -202,6 +208,7 @@ func (q *Queries) SearchEmployers(ctx context.Context, arg SearchEmployersParams
 			&i.CanonicalName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -223,7 +230,7 @@ SET inn = ?,
     canonical_name = ?,
     updated_at = ?
 WHERE id = ?
-RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at
+RETURNING id, inn, inn_normalized, canonical_name, created_at, updated_at, status
 `
 
 type UpdateEmployerParams struct {
@@ -250,6 +257,7 @@ func (q *Queries) UpdateEmployer(ctx context.Context, arg UpdateEmployerParams) 
 		&i.CanonicalName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }

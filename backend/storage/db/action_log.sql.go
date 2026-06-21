@@ -53,3 +53,48 @@ func (q *Queries) CreateActionLog(ctx context.Context, arg CreateActionLogParams
 	)
 	return i, err
 }
+
+const listActionLogsByEntity = `-- name: ListActionLogsByEntity :many
+SELECT id, actor, action, entity_type, entity_id, details, created_at
+FROM action_log
+WHERE entity_type = ? AND entity_id = ?
+ORDER BY id ASC
+`
+
+type ListActionLogsByEntityParams struct {
+	EntityType string        `json:"entity_type"`
+	EntityID   sql.NullInt64 `json:"entity_id"`
+}
+
+// Test helper: returns all action_log rows for a given entity, ordered by
+// insertion (id ASC). Used by service tests to verify audit trails.
+func (q *Queries) ListActionLogsByEntity(ctx context.Context, arg ListActionLogsByEntityParams) ([]ActionLog, error) {
+	rows, err := q.db.QueryContext(ctx, listActionLogsByEntity, arg.EntityType, arg.EntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ActionLog
+	for rows.Next() {
+		var i ActionLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Actor,
+			&i.Action,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Details,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

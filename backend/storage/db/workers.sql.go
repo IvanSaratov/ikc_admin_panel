@@ -23,7 +23,7 @@ INSERT INTO workers (
   updated_at
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+RETURNING id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 `
 
 type CreateWorkerParams struct {
@@ -62,12 +62,13 @@ func (q *Queries) CreateWorker(ctx context.Context, arg CreateWorkerParams) (Wor
 		&i.BirthDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorker = `-- name: GetWorker :one
-SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 FROM workers
 WHERE id = ?
 `
@@ -86,12 +87,13 @@ func (q *Queries) GetWorker(ctx context.Context, id int64) (Worker, error) {
 		&i.BirthDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkerByID = `-- name: GetWorkerByID :one
-SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 FROM workers
 WHERE id = ?
 `
@@ -110,12 +112,13 @@ func (q *Queries) GetWorkerByID(ctx context.Context, id int64) (Worker, error) {
 		&i.BirthDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkerByNormalizedSNILS = `-- name: GetWorkerByNormalizedSNILS :one
-SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 FROM workers
 WHERE snils_normalized = ?
 `
@@ -134,12 +137,13 @@ func (q *Queries) GetWorkerByNormalizedSNILS(ctx context.Context, snilsNormalize
 		&i.BirthDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const listWorkers = `-- name: ListWorkers :many
-SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 FROM workers
 ORDER BY last_name, first_name, middle_name
 `
@@ -164,6 +168,7 @@ func (q *Queries) ListWorkers(ctx context.Context) ([]Worker, error) {
 			&i.BirthDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -179,7 +184,7 @@ func (q *Queries) ListWorkers(ctx context.Context) ([]Worker, error) {
 }
 
 const searchWorkers = `-- name: SearchWorkers :many
-SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+SELECT id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 FROM workers
 WHERE last_name LIKE ? OR first_name LIKE ? OR snils_normalized LIKE ? OR email LIKE ?
 ORDER BY last_name, first_name, middle_name
@@ -217,6 +222,7 @@ func (q *Queries) SearchWorkers(ctx context.Context, arg SearchWorkersParams) ([
 			&i.BirthDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -242,7 +248,7 @@ SET last_name = ?,
     birth_date = ?,
     updated_at = ?
 WHERE id = ?
-RETURNING id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at
+RETURNING id, last_name, first_name, middle_name, snils, snils_normalized, email, birth_date, created_at, updated_at, status
 `
 
 type UpdateWorkerParams struct {
@@ -281,6 +287,7 @@ func (q *Queries) UpdateWorker(ctx context.Context, arg UpdateWorkerParams) (Wor
 		&i.BirthDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Status,
 	)
 	return i, err
 }

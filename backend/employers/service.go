@@ -149,13 +149,15 @@ func (s *Service) Update(ctx context.Context, id int64, form Form) (storagedb.Em
 	return updated, nil
 }
 
-// Deactivate is a placeholder: employers has no `status` column on MVP schema,
-// so the query only bumps updated_at. The audit row is still recorded so the
-// event is visible in the action_log.
+// Deactivate flips the employer's soft-delete flag to 'inactive'. Idempotent:
+// if the employer is already inactive, no DB write or audit row is produced.
 func (s *Service) Deactivate(ctx context.Context, id int64) (storagedb.Employer, error) {
 	previous, err := s.queries.GetEmployerByID(ctx, id)
 	if err != nil {
 		return storagedb.Employer{}, fmt.Errorf("get employer: %w", err)
+	}
+	if previous.Status == "inactive" {
+		return previous, nil
 	}
 
 	updated, err := s.queries.DeactivateEmployer(ctx, storagedb.DeactivateEmployerParams{
@@ -171,8 +173,8 @@ func (s *Service) Deactivate(ctx context.Context, id int64) (storagedb.Employer,
 		EntityType: "employer",
 		EntityID:   sql.NullInt64{Int64: updated.ID, Valid: true},
 		Details: map[string]any{
-			"from": previous.UpdatedAt,
-			"to":   updated.UpdatedAt,
+			"from": map[string]any{"status": "active"},
+			"to":   map[string]any{"status": "inactive"},
 		},
 	})
 	return updated, nil
