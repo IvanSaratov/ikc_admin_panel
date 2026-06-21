@@ -188,7 +188,7 @@ func (s *Service) ImportRows(ctx context.Context, requestID int64, xlsxData []by
 		SourceSha256:    nullableString(hashHex),
 		UploadedByActor: "operator",
 		ReceivedAt:      now,
-		Status:          "processed",
+		Status:          "completed",
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	})
