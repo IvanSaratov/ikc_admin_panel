@@ -107,3 +107,52 @@ func CreateDocx(
 - Hardcoded "Times New Roman" font strings everywhere (line 137-144) — any new template must use this font.
 - `templatePath` parameter is misnamed: declared `string` but used as `[]byte`. We should rename to `template []byte` in the adapter wrapper.
 - `logrus.Logger` is a public dep — we'd inject our own logger or replace the call sites.
+
+---
+
+## 4. XLSX package inventory
+
+**Package path:** `github.com/IvanSaratov/mintrud_generator/src/reader` (file `xlsx.go`).
+
+**Public entry point:**
+
+```go
+// xlsx.go:34
+func ReadXLSX(
+    fileContent *bytes.Buffer,        // uploaded XLSX file
+    table string,                     // worksheet name
+    positions string,                 // comma-separated row numbers, e.g. "1,3-5,8"
+    programs []string,                // program IDs (matches models.LESSON_BY_NAME keys)
+    org *models.Organization,         // default org stamped on every record
+    log *logrus.Logger,
+) (*models.RegistrySet, error)
+```
+
+- **Input:** XLSX byte stream + sheet name + 1-based row positions + program IDs.
+- **Output:** a `*models.RegistrySet` ready for `GenerateXML` or `CreateDocx`.
+- **Use case in legacy:** bulk-import mode via web UI (admin uploads XLSX, picks rows, picks programs, hits a button). **Our admin panel does not need this path** — workers, programs, and protocols are already in our DB (PostgreSQL). XLSX package is therefore **out of MVP scope**. Recorded for parity and possible future bulk-import feature.
+
+**Column contract (from comments):**
+
+| Col | Meaning                                          |
+|-----|--------------------------------------------------|
+| A   | Employer title                                   |
+| B   | Employer INN                                     |
+| C   | Full FIO (free-form, parsed by `fullname_parser`)|
+| D   | Position                                         |
+| F   | SNILS (blank = foreign worker)                   |
+| G   | Protocol number                                  |
+| H   | Protocol date (`1-2-06` → `2-1-2006`)            |
+| J   | Education period (`01.01.2024-12.12.2024`)       |
+| L   | Email (optional, warns if missing)              |
+
+**External Go deps (XLSX path):**
+- `github.com/xuri/excelize/v2 v2.9.0` — XLSX read/write.
+- `github.com/amonsat/fullname_parser` — Russian FIO parser (note the **inverted** field semantics: `parsed.First` → LastName, `parsed.Middle` → FirstName, `parsed.Last` → FirstName or MiddleName; see xlsx.go:86-94 inline comment).
+- `github.com/sirupsen/logrus v1.9.3` — logging.
+- `github.com/IvanSaratov/mintrud_generator/src/core` — internal helper `ConvertStringToNumber` (parses "1,3-5,8" into `[]int`).
+
+**Coupling notes / risks:**
+- `fullname_parser` mapping quirk (above) — if D3 ever does need bulk-import, this must be preserved or re-tested.
+- `core.ConvertStringToNumber` lives in the same module — can't be used as a standalone import if we go with `go.mod replace` (it pulls the whole `core` package, including `logrus` setup).
+- Logic of "one record per (row, program)" (`xlsx.go:54-153`) is wasteful for our use case where DB rows are already 1:1 with workers per protocol.
