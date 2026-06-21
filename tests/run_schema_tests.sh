@@ -37,7 +37,7 @@ run_expected_failure() {
     exit 1
   fi
 
-  if ! grep -Eq "(UNIQUE|CHECK|FOREIGN KEY) constraint failed" "/tmp/mintrud_${name}.err"; then
+  if ! grep -Eq "(UNIQUE|CHECK|FOREIGN KEY|NOT NULL) constraint failed" "/tmp/mintrud_${name}.err"; then
     echo "FAIL unexpected error for: $name"
     cat "/tmp/mintrud_${name}.err" >&2
     exit 1
@@ -48,6 +48,7 @@ run_expected_failure() {
 
 run_success "schema_smoke" "tests/schema_smoke.sql"
 run_expected_failure "duplicate_snils"
+run_expected_failure "worker_email_required"
 run_expected_failure "duplicate_normalized_snils"
 run_expected_failure "duplicate_normalized_inn"
 run_expected_failure "fixed_protocol_requires_number"

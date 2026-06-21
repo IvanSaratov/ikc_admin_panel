@@ -50,7 +50,7 @@ VALUES (
   'Mamed ogly',
   '123-456-789 00',
   '12345678900',
-  NULL,
+  'student@example.test',
   NULL,
   '2026-05-27T00:00:00Z',
   '2026-05-27T00:00:00Z'
@@ -139,3 +139,20 @@ INSERT INTO protocol_participants (
   updated_at
 )
 VALUES (1, 1, 'active', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z');
+
+INSERT INTO action_log (
+  actor,
+  action,
+  entity_type,
+  entity_id,
+  details,
+  created_at
+)
+VALUES (
+  'operator_unidentified',
+  'worker.created',
+  'workers',
+  1,
+  '{"source":"schema_smoke"}',
+  '2026-05-27T00:00:00Z'
+);

@@ -1,3 +1,4 @@
+-- +goose Up
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE program_groups (
@@ -52,7 +53,7 @@ CREATE TABLE workers (
   middle_name TEXT,
   snils TEXT NOT NULL,
   snils_normalized TEXT NOT NULL,
-  email TEXT,
+  email TEXT NOT NULL,
   birth_date TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -343,3 +344,20 @@ CREATE INDEX ix_generation_runs_status
 
 CREATE INDEX ix_generation_runs_generated_at
   ON generation_runs (generated_at);
+
+CREATE TABLE action_log (
+  id INTEGER PRIMARY KEY,
+  actor TEXT NOT NULL
+    CHECK (actor IN ('system', 'import', 'operator_unidentified')),
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER,
+  details TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX ix_action_log_created_at
+  ON action_log (created_at);
+
+CREATE INDEX ix_action_log_entity
+  ON action_log (entity_type, entity_id);

@@ -5,7 +5,7 @@
 *.db-*
 *.sqlite
 *.sqlite3
-docs/
+docs/superpowers/
 
 # Environment and secrets
 .env

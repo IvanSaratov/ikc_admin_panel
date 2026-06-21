@@ -19,7 +19,7 @@ VALUES (
   NULL,
   '123-456-789 00',
   '12345678900',
-  NULL,
+  'duplicate@example.test',
   NULL,
   '2026-05-27T00:00:00Z',
   '2026-05-27T00:00:00Z'
@@ -43,6 +43,30 @@ VALUES (
   NULL,
   '12345678900',
   '12345678900',
+  'duplicate-normalized@example.test',
+  NULL,
+  '2026-05-27T00:00:00Z',
+  '2026-05-27T00:00:00Z'
+);
+
+-- name: worker_email_required
+INSERT INTO workers (
+  last_name,
+  first_name,
+  middle_name,
+  snils,
+  snils_normalized,
+  email,
+  birth_date,
+  created_at,
+  updated_at
+)
+VALUES (
+  'Noemail',
+  'Worker',
+  NULL,
+  '987-654-321 00',
+  '98765432100',
   NULL,
   NULL,
   '2026-05-27T00:00:00Z',

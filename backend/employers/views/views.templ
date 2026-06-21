@@ -1,0 +1,54 @@
+package views
+
+import (
+	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
+)
+
+templ List(employers []db.Employer) {
+	@layouts.Shell("Employers", "employers") {
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Employers</h3>
+			</div>
+			<div class="card-body">
+				<form method="post" action="/employers" class="row g-2 align-items-end">
+					<div class="col-12 col-md-3">
+						<label class="form-label" for="employer-inn">INN</label>
+						<input id="employer-inn" class="form-control" name="inn"/>
+					</div>
+					<div class="col-12 col-md-6">
+						<label class="form-label" for="employer-name">Canonical name</label>
+						<input id="employer-name" class="form-control" name="canonical_name"/>
+					</div>
+					<div class="col-12 col-md-auto">
+						<button class="btn btn-primary" type="submit">Create employer</button>
+					</div>
+				</form>
+			</div>
+			<div class="table-responsive">
+				<table class="table table-vcenter card-table">
+					<thead>
+						<tr>
+							<th>INN</th>
+							<th>Name</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, employer := range employers {
+							<tr>
+								<td>{ employer.Inn }</td>
+								<td>{ employer.CanonicalName }</td>
+							</tr>
+						}
+						if len(employers) == 0 {
+							<tr>
+								<td colspan="2" class="text-secondary">No employers yet.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}

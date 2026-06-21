@@ -1,0 +1,135 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
+)
+
+templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWorkerEmployerAssignmentsRow) {
+	@layouts.Shell("Workers", "workers") {
+		<div class="row row-cards">
+			<div class="col-12">
+				<div class="card">
+					<div class="card-header">
+						<h3 class="card-title">Workers</h3>
+					</div>
+					<div class="card-body">
+						<form method="post" action="/workers" class="row g-2 align-items-end">
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="worker-last-name">Last name</label>
+								<input id="worker-last-name" class="form-control" name="last_name"/>
+							</div>
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="worker-first-name">First name</label>
+								<input id="worker-first-name" class="form-control" name="first_name"/>
+							</div>
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="worker-middle-name">Middle name</label>
+								<input id="worker-middle-name" class="form-control" name="middle_name"/>
+							</div>
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="worker-snils">SNILS</label>
+								<input id="worker-snils" class="form-control" name="snils"/>
+							</div>
+							<div class="col-12 col-md-3">
+								<label class="form-label" for="worker-email">Email</label>
+								<input id="worker-email" class="form-control" name="email" type="email"/>
+							</div>
+							<div class="col-12 col-md-auto">
+								<button class="btn btn-primary" type="submit">Create worker</button>
+							</div>
+						</form>
+					</div>
+					<div class="table-responsive">
+						<table class="table table-vcenter card-table">
+							<thead>
+								<tr>
+									<th>Name</th>
+									<th>SNILS</th>
+									<th>Email</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, worker := range workers {
+									<tr>
+										<td>{ worker.LastName } { worker.FirstName }</td>
+										<td>{ worker.Snils }</td>
+										<td>{ worker.Email }</td>
+									</tr>
+								}
+								if len(workers) == 0 {
+									<tr>
+										<td colspan="3" class="text-secondary">No workers yet.</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+			<div class="col-12">
+				<div class="card">
+					<div class="card-header">
+						<h3 class="card-title">Employer assignment</h3>
+					</div>
+					<div class="card-body">
+						<form method="post" action="/workers/assignments" class="row g-2 align-items-end">
+							<div class="col-12 col-md-4">
+								<label class="form-label" for="assignment-worker">Worker</label>
+								<select id="assignment-worker" class="form-select" name="worker_id">
+									for _, worker := range workers {
+										<option value={ fmt.Sprint(worker.ID) }>{ worker.LastName } { worker.FirstName }</option>
+									}
+								</select>
+							</div>
+							<div class="col-12 col-md-4">
+								<label class="form-label" for="assignment-employer">Employer</label>
+								<select id="assignment-employer" class="form-select" name="employer_id">
+									for _, employer := range employers {
+										<option value={ fmt.Sprint(employer.ID) }>{ employer.CanonicalName }</option>
+									}
+								</select>
+							</div>
+							<div class="col-12 col-md-3">
+								<label class="form-label" for="assignment-position">Position</label>
+								<input id="assignment-position" class="form-control" name="current_position"/>
+							</div>
+							<div class="col-12 col-md-auto">
+								<button class="btn btn-primary" type="submit">Assign</button>
+							</div>
+						</form>
+					</div>
+					<div class="table-responsive">
+						<table class="table table-vcenter card-table">
+							<thead>
+								<tr>
+									<th>Worker</th>
+									<th>Employer</th>
+									<th>Position</th>
+									<th>Status</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, assignment := range assignments {
+									<tr>
+										<td>{ assignment.WorkerLastName } { assignment.WorkerFirstName }</td>
+										<td>{ assignment.EmployerName }</td>
+										<td>{ assignment.CurrentPosition }</td>
+										<td>{ assignment.Status }</td>
+									</tr>
+								}
+								if len(assignments) == 0 {
+									<tr>
+										<td colspan="4" class="text-secondary">No employer assignments yet.</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

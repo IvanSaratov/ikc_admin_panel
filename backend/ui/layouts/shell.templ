@@ -1,0 +1,41 @@
+package layouts
+
+templ Shell(title string, active string) {
+	<!DOCTYPE html>
+	<html lang="ru">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } - Mintrud Admin</title>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css"/>
+		</head>
+		<body>
+			<div class="page">
+				<aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="light">
+					<div class="container-fluid">
+						<h1 class="navbar-brand">Mintrud Admin</h1>
+						<div class="navbar-nav">
+							<a class={ "nav-link " + navActive(active, "programs") } href="/programs">Programs</a>
+							<a class={ "nav-link " + navActive(active, "employers") } href="/employers">Employers</a>
+							<a class={ "nav-link " + navActive(active, "workers") } href="/workers">Workers</a>
+						</div>
+					</div>
+				</aside>
+				<div class="page-wrapper">
+					<div class="page-header d-print-none">
+						<div class="container-xl">
+							<h2 class="page-title">{ title }</h2>
+						</div>
+					</div>
+					<div class="page-body">
+						<div class="container-xl">
+							{ children... }
+						</div>
+					</div>
+				</div>
+			</div>
+			<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+			<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/js/tabler.min.js"></script>
+		</body>
+	</html>
+}

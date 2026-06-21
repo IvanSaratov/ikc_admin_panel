@@ -1,0 +1,123 @@
+package views
+
+import (
+	"fmt"
+
+	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
+)
+
+templ List(groups []db.ProgramGroup, programs []db.Program) {
+	@layouts.Shell("Programs", "programs") {
+		<div class="row row-cards">
+			<div class="col-12">
+				<div class="card">
+					<div class="card-header">
+						<h3 class="card-title">Program groups</h3>
+					</div>
+					<div class="card-body">
+						<form method="post" action="/programs/groups" class="row g-2 align-items-end">
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="group-code">Code</label>
+								<input id="group-code" class="form-control" name="code"/>
+							</div>
+							<div class="col-12 col-md-6">
+								<label class="form-label" for="group-name">Name</label>
+								<input id="group-name" class="form-control" name="name"/>
+							</div>
+							<div class="col-12 col-md-auto">
+								<button class="btn btn-primary" type="submit">Create group</button>
+							</div>
+						</form>
+					</div>
+					<div class="table-responsive">
+						<table class="table table-vcenter card-table">
+							<thead>
+								<tr>
+									<th>Code</th>
+									<th>Name</th>
+									<th>Status</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, group := range groups {
+									<tr>
+										<td>{ group.Code }</td>
+										<td>{ group.Name }</td>
+										<td>{ group.Status }</td>
+									</tr>
+								}
+								if len(groups) == 0 {
+									<tr>
+										<td colspan="3" class="text-secondary">No program groups yet.</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+			<div class="col-12">
+				<div class="card">
+					<div class="card-header">
+						<h3 class="card-title">Programs</h3>
+					</div>
+					<div class="card-body">
+						<form method="post" action="/programs" class="row g-2 align-items-end">
+							<div class="col-12 col-md-3">
+								<label class="form-label" for="program-group">Group</label>
+								<select id="program-group" class="form-select" name="program_group_id">
+									for _, group := range groups {
+										<option value={ fmt.Sprint(group.ID) }>{ group.Code } - { group.Name }</option>
+									}
+								</select>
+							</div>
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="program-code">Code</label>
+								<input id="program-code" class="form-control" name="code"/>
+							</div>
+							<div class="col-12 col-md-3">
+								<label class="form-label" for="program-name">Name</label>
+								<input id="program-name" class="form-control" name="name"/>
+							</div>
+							<div class="col-12 col-md-2">
+								<label class="form-label" for="program-hours">Hours</label>
+								<input id="program-hours" class="form-control" name="default_hours" type="number" min="1"/>
+							</div>
+							<div class="col-12 col-md-auto">
+								<button class="btn btn-primary" type="submit">Create program</button>
+							</div>
+						</form>
+					</div>
+					<div class="table-responsive">
+						<table class="table table-vcenter card-table">
+							<thead>
+								<tr>
+									<th>Code</th>
+									<th>Name</th>
+									<th>Hours</th>
+									<th>Status</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, program := range programs {
+									<tr>
+										<td>{ program.Code }</td>
+										<td>{ program.Name }</td>
+										<td>{ program.DefaultHours }</td>
+										<td>{ program.Status }</td>
+									</tr>
+								}
+								if len(programs) == 0 {
+									<tr>
+										<td colspan="4" class="text-secondary">No programs yet.</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
