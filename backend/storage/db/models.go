@@ -180,6 +180,16 @@ type TrainingRecord struct {
 	UpdatedAt           string         `json:"updated_at"`
 }
 
+type User struct {
+	ID           int64  `json:"id"`
+	Login        string `json:"login"`
+	PasswordHash string `json:"password_hash"`
+	Role         string `json:"role"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
 type Worker struct {
 	ID              int64          `json:"id"`
 	LastName        string         `json:"last_name"`
