@@ -71,3 +71,13 @@ SET status = 'inactive',
     updated_at = ?
 WHERE id = ?
 RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at;
+
+-- name: FindActiveWorkerEmployer :one
+-- Used by ApplyRow to locate the active assignment between a worker and the
+-- request's employer; falls back to creating one if none exists.
+SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
+FROM worker_employers
+WHERE worker_id = ?
+  AND employer_id = ?
+  AND status = 'active'
+LIMIT 1;
