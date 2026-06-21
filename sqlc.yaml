@@ -1,7 +1,9 @@
 version: "2"
 sql:
   - engine: sqlite
-    schema: migrations/001_initial_schema.sql
+    schema:
+      - migrations/001_initial_schema.sql
+      - migrations/002_schema_cleanup.sql
     queries: backend/storage/queries
     gen:
       go:

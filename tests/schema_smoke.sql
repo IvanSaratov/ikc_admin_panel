@@ -1,6 +1,7 @@
 PRAGMA foreign_keys = ON;
 
 .read migrations/001_initial_schema.sql
+.read migrations/002_schema_cleanup.sql
 
 INSERT INTO program_groups (code, name, status, created_at, updated_at)
 VALUES ('A', 'Direction A', 'active', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z');
@@ -139,6 +140,77 @@ INSERT INTO protocol_participants (
   updated_at
 )
 VALUES (1, 1, 'active', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z');
+
+-- Smoke row exercising the new `protocols.protocol_suffix` column.
+INSERT INTO protocols (
+  program_group_id,
+  status,
+  training_start_date,
+  training_end_date,
+  protocol_date,
+  sequence_year,
+  protocol_month,
+  annual_sequence_number,
+  protocol_suffix,
+  protocol_number,
+  fixed_at,
+  created_at,
+  updated_at
+)
+VALUES (
+  1,
+  'fixed',
+  '2026-05-11',
+  '2026-05-15',
+  '2026-05-15',
+  2026,
+  5,
+  14,
+  '2',
+  '2605A14/2',
+  '2026-05-27T00:00:00Z',
+  '2026-05-27T00:00:00Z',
+  '2026-05-27T00:00:00Z'
+);
+
+-- Smoke rows exercising the new `imports` / `import_rows` tables.
+INSERT INTO imports (
+  id,
+  source_type,
+  source_file_name,
+  source_sha256,
+  uploaded_by_actor,
+  received_at,
+  status,
+  created_at,
+  updated_at
+)
+VALUES (
+  1,
+  'xlsx',
+  'sample_request.xlsx',
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  'operator_unidentified',
+  '2026-05-27T00:00:00Z',
+  'completed',
+  '2026-05-27T00:00:00Z',
+  '2026-05-27T00:00:00Z'
+);
+
+INSERT INTO import_rows (
+  id,
+  import_id,
+  row_number,
+  raw_data,
+  created_at
+)
+VALUES (
+  1,
+  1,
+  1,
+  '{"name":"Aliyev Murad","snils":"123-456-789 00"}',
+  '2026-05-27T00:00:00Z'
+);
 
 INSERT INTO action_log (
   actor,
