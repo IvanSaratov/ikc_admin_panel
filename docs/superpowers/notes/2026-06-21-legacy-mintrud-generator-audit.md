@@ -232,3 +232,22 @@ func (c *MClient) CheckCourseExist(courseID string) (bool, error)
 - `src/reader/` — out of MVP scope (see §4); revisit if bulk-import feature is requested.
 - `src/moodle/` — out of MVP scope (see §5).
 - `src/server/`, `src/initiate/`, `installer/`, `mintrud_generator.go` — replaced by our own.
+
+---
+
+## 7. Adapter sketch (`backend/documents/adapter_legacy.go`)
+
+A single Go file in our `backend/documents/` package, no exported types from the adapter (all functions return raw bytes or write to `io.Writer`). Three entry points: `RenderRegistryXML(ctx, protocolIDs []int64) ([]byte, error)` for XML, `RenderProtocolDocs(ctx, protocolIDs []int64) ([][]byte, error)` for DOCX (caller zips them), and (later) `RenderImportXLSX(ctx, r io.Reader) ([]int64, error)` for bulk import. The adapter takes a service-layer function (typically already provided by the audit service for F1) that returns `[]*AuditProtocol` with eager-loaded `Worker`, `Employer`, `Program`, `Organization` and translates each row into a `*models.RegistryRecord` — populating `Worker.{LastName, FirstName, MiddleName, Snils, Position, EmployerInn, EmployerTitle, IsForeignSnils}`, `Organization.{Inn, Title}`, `Test.{Date, ProtocolNumber, LearnProgramTitle, LearnProgramIdAttr, EducationStart, EducationEnd}`, and setting `IsPassedAttr = "true"`. After translation, it calls `legacy.GenerateXML(registrySet)` and `legacy.CreateDocx(registrySet, templateBytes, timeTypeKey, ourLoggerAdapter)`. The DOCX template bytes come from a new `documents.ProtocolTemplate()` helper that loads `protocol.docx` from `backend/documents/templates/` (we need to obtain this template from the legacy maintainer — see §8). Time-type mapping (`models.TIME_TO_TYPE`) must be sourced from our `audit_programs.category` column (a 1-char code: А/Б/В/П/С). The adapter must also strip the `logrus.Logger` parameter from `CreateDocx`; the cheapest path is a thin shim `type slogAdapter struct{ *slog.Logger }` with an `Infof/Debugf/Warnf/Errorf` method set, satisfying `logrus.FieldLogger` by interface assertion — or, if `logrus` proves unavoidable, just add it as a dep.
+
+---
+
+## 8. Open questions for D3
+
+- **DOCX template asset.** The legacy `protocol.docx` (the file with the 3 tables referenced in §3) is **not in the repo** — needs to be obtained from the legacy maintainer (Ivan Saratov) or extracted from a running legacy build. Without it, DOCX generation is blocked.
+- **`logrus` dependency removal.** Should we (a) vendor `logrus` just for the 3-4 log calls in `gen_docx.go`, or (b) rewrite the calls to `slog` before copy? Option (b) is cleaner but option (a) is faster and keeps the legacy diff minimal. Recommend (b) — the rewrite is mechanical (4 calls, 2 formats).
+- **`templatePath` parameter type.** Legacy declares it as `string` but uses it as `[]byte` (see §3 note). Should the adapter normalize to `[]byte` at the call site, or should we patch the copy before integrating? Recommend patching the copy during the vendor step.
+- **Schema validation.** `gen_xml.go` uses `xmlwriter` but does not validate against an XSD. Does the Mintrud validator publish an XSD we can generate or fetch? If yes, D3 should consider adding a post-generation validation step.
+- **`Test.IsPassedAttr` hardcoding.** Legacy always emits `isPassed="true"` and assumes failed rows never reach the generator. In our DB-driven model, D3 must either filter at the SQL layer (`WHERE status = 'passed'`) or have the adapter skip non-passed rows.
+- **Locale defaults.** `goodsign/monday` defaults to Russian (`monday.LocaleRuRU`). If the template ever uses English placeholders, locale handling will need to be exposed.
+- **Moodle `SPEC_VALUE` collisions.** If we later integrate Moodle (§5), we must ensure only one code path writes the `idnumber = "mintrud"` marker — the legacy `CreateUser` and any new code D3 writes.
+- **Snils foreign-worker handling.** Legacy sets `IsForeignSnils = "true"` when SNILS is blank (xlsx.go:107-112). Our DB schema for foreign workers is TBD — does the audit model have a `snils` column with `NULL` for foreigners, or a separate `is_foreign` boolean?
