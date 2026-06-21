@@ -56,3 +56,18 @@ SET status = ?,
     updated_at = ?
 WHERE id = ?
 RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at;
+
+-- name: UpdateAssignment :one
+UPDATE worker_employers
+SET employer_id = ?,
+    current_position = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at;
+
+-- name: DeactivateAssignment :one
+UPDATE worker_employers
+SET status = 'inactive',
+    updated_at = ?
+WHERE id = ?
+RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at;
