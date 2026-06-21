@@ -200,6 +200,73 @@ func TestRecord_DefaultsActorWhenEmpty(t *testing.T) {
 	}
 }
 
+// TestRecord_UsesActorFromContext verifies the actor-propagation contract
+// introduced in F3: when RecordInput.Actor is empty but the request
+// context was tagged via audit.WithActor, Record reads the actor from
+// the context. This is the path taken by every authenticated handler
+// after admin.RequireAuth publishes the login on the request context.
+func TestRecord_UsesActorFromContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := newQueries(t)
+	service := audit.NewService(queries.Queries)
+
+	ctx = audit.WithActor(ctx, "alice")
+
+	err := service.Record(ctx, audit.RecordInput{
+		Action:     "update",
+		EntityType: "employer",
+		EntityID:   sql.NullInt64{Int64: 7, Valid: true},
+		// Actor intentionally empty — Record should fall back to ctx.
+	})
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	var actor string
+	err = queries.DB.QueryRowContext(ctx, `SELECT actor FROM action_log`).Scan(&actor)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if actor != "alice" {
+		t.Errorf("actor = %q, want alice", actor)
+	}
+}
+
+// TestRecord_ActorInputBeatsContext verifies the precedence rule: when
+// the caller passes an explicit Actor, that wins over the context value.
+// Handlers that legitimately need to attribute an action to someone
+// other than the logged-in user (e.g. impersonation) rely on this.
+func TestRecord_ActorInputBeatsContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := newQueries(t)
+	service := audit.NewService(queries.Queries)
+
+	ctx = audit.WithActor(ctx, "alice")
+
+	err := service.Record(ctx, audit.RecordInput{
+		Action:     "delete",
+		EntityType: "session",
+		EntityID:   sql.NullInt64{},
+		Actor:      "system",
+	})
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	var actor string
+	err = queries.DB.QueryRowContext(ctx, `SELECT actor FROM action_log`).Scan(&actor)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if actor != "system" {
+		t.Errorf("actor = %q, want system (explicit input should win)", actor)
+	}
+}
+
 // queriesWithDB exposes the underlying *sql.DB so tests can read back rows
 // without coupling to generated query methods.
 type queriesWithDB struct {
