@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -222,6 +223,206 @@ func TestValidationResponseIncludesFieldMessage(t *testing.T) {
 	}
 }
 
+// seedGroup posts a program group creation form so subsequent tests have
+// something with id=1 to edit/deactivate.
+func seedGroup(t *testing.T, router http.Handler) {
+	t.Helper()
+	form := url.Values{}
+	form.Set("code", "A")
+	form.Set("name", "Охрана труда")
+	req := httptest.NewRequest(http.MethodPost, "/programs/groups", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+}
+
+func TestEdit_GET_ReturnsForm_200(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter(t)
+	seedGroup(t, router)
+
+	req := httptest.NewRequest(http.MethodGet, "/programs/groups/1/edit", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Edit program group") {
+		t.Errorf("body missing edit heading: %s", body)
+	}
+	if !strings.Contains(body, `value="A"`) {
+		t.Errorf("body missing existing code value: %s", body)
+	}
+}
+
+func TestEdit_POST_UpdatesRecord_Redirects(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter(t)
+	seedGroup(t, router)
+
+	form := url.Values{}
+	form.Set("code", "A")
+	form.Set("name", "Renamed group")
+	req := httptest.NewRequest(http.MethodPost, "/programs/groups/1/edit", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/programs", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "Renamed group") {
+		t.Fatalf("updated name not visible: %s", rec.Body.String())
+	}
+}
+
+func TestDeactivate_POST_ChangesStatus_Redirects(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter(t)
+	seedGroup(t, router)
+
+	req := httptest.NewRequest(http.MethodPost, "/programs/groups/1/deactivate", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+
+	// Edit form should still render (group exists), and the list should now
+	// show "inactive".
+	req = httptest.NewRequest(http.MethodGet, "/programs", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "inactive") {
+		t.Fatalf("status not reflected on list: %s", rec.Body.String())
+	}
+}
+
+func TestDetail_GET_Returns200_WithChildren(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter(t)
+
+	// Create employer.
+	form := url.Values{}
+	form.Set("inn", "7700000000")
+	form.Set("canonical_name", "ООО Ромашка")
+	req := httptest.NewRequest(http.MethodPost, "/employers", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Create worker.
+	workerForm := url.Values{}
+	workerForm.Set("last_name", "Петров")
+	workerForm.Set("first_name", "Петр")
+	workerForm.Set("snils", "123-456-789 00")
+	workerForm.Set("email", "worker@example.test")
+	req = httptest.NewRequest(http.MethodPost, "/workers", strings.NewReader(workerForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Assign.
+	assign := url.Values{}
+	assign.Set("worker_id", "1")
+	assign.Set("employer_id", "1")
+	assign.Set("current_position", "Инженер")
+	req = httptest.NewRequest(http.MethodPost, "/workers/assignments", strings.NewReader(assign.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Now hit the employer detail page.
+	req = httptest.NewRequest(http.MethodGet, "/employers/1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "ООО Ромашка") {
+		t.Errorf("missing employer name on detail: %s", body)
+	}
+	if !strings.Contains(body, "Worker assignments") {
+		t.Errorf("missing assignments section: %s", body)
+	}
+
+	// Worker detail should also have 200 + employer card.
+	req = httptest.NewRequest(http.MethodGet, "/workers/1", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("worker detail status = %d, want 200", rec.Code)
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, "Петров") {
+		t.Errorf("missing worker surname on detail: %s", body)
+	}
+	if !strings.Contains(body, "Инженер") {
+		t.Errorf("missing assignment on detail: %s", body)
+	}
+}
+
+func TestMutation_AlwaysWritesAudit(t *testing.T) {
+	t.Parallel()
+
+	router, database := newTestRouterWithDB(t)
+
+	// Create an employer through the router.
+	form := url.Values{}
+	form.Set("inn", "7700000000")
+	form.Set("canonical_name", "ООО Ромашка")
+	req := httptest.NewRequest(http.MethodPost, "/employers", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Update it.
+	form = url.Values{}
+	form.Set("inn", "7700000000")
+	form.Set("canonical_name", "ООО Ромашка+")
+	req = httptest.NewRequest(http.MethodPost, "/employers/1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Deactivate it.
+	req = httptest.NewRequest(http.MethodPost, "/employers/1/deactivate", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	rows, err := database.QueryContext(context.Background(), `
+		SELECT action FROM action_log
+		WHERE entity_type = 'employer' AND entity_id = 1
+		ORDER BY id
+	`)
+	if err != nil {
+		t.Fatalf("query action_log: %v", err)
+	}
+	defer rows.Close()
+
+	got := map[string]int{}
+	for rows.Next() {
+		var action string
+		if err := rows.Scan(&action); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got[action]++
+	}
+	for _, expected := range []string{"create", "update", "deactivate"} {
+		if got[expected] == 0 {
+			t.Errorf("expected audit row for action %q, got %v", expected, got)
+		}
+	}
+}
+
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 
@@ -239,4 +440,25 @@ func newTestRouter(t *testing.T) http.Handler {
 	}
 
 	return app.NewRouter(db)
+}
+
+// newTestRouterWithDB returns the router and the underlying *sql.DB so
+// tests can inspect the action_log table directly.
+func newTestRouterWithDB(t *testing.T) (http.Handler, *sql.DB) {
+	t.Helper()
+
+	ctx := context.Background()
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "mintrud-test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	if err := storage.Migrate(db); err != nil {
+		t.Fatalf("migrate db: %v", err)
+	}
+
+	return app.NewRouter(db), db
 }
