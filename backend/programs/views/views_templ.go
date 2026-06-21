@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
@@ -70,7 +71,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(group.Code)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 49, Col: 26}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 50, Col: 26}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -83,7 +84,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 50, Col: 26}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 51, Col: 26}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -96,7 +97,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(group.Status)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 51, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 52, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -114,7 +115,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 					var templ_7745c5c3_Var6 templ.SafeURL
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/programs/groups/%d/edit", group.ID)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 54, Col: 119}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 55, Col: 119}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -127,7 +128,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 					var templ_7745c5c3_Var7 templ.SafeURL
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/programs/groups/%d/deactivate", group.ID)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 55, Col: 111}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 56, Col: 111}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -182,7 +183,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(group.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 87, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 88, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 				if templ_7745c5c3_Err != nil {
@@ -195,7 +196,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(group.Code)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 87, Col: 61}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 88, Col: 61}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -208,7 +209,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 87, Col: 78}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 88, Col: 78}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -231,7 +232,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(program.Code)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 122, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 123, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -244,7 +245,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(program.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 123, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 124, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -257,7 +258,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(program.DefaultHours)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 124, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 125, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -270,7 +271,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(program.Status)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 125, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 126, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -288,7 +289,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 					var templ_7745c5c3_Var15 templ.SafeURL
 					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/programs/%d/edit", program.ID)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 128, Col: 114}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 129, Col: 114}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 					if templ_7745c5c3_Err != nil {
@@ -301,7 +302,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 					var templ_7745c5c3_Var16 templ.SafeURL
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/programs/%d/deactivate", program.ID)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 129, Col: 106}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 130, Col: 106}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -342,7 +343,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Programs", "programs").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Programs", "programs", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -390,7 +391,7 @@ func EditGroup(r *http.Request, group db.ProgramGroup) templ.Component {
 			var templ_7745c5c3_Var19 templ.SafeURL
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/programs/groups/%d/edit", group.ID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 160, Col: 97}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 161, Col: 97}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
@@ -411,7 +412,7 @@ func EditGroup(r *http.Request, group db.ProgramGroup) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(group.Code)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 164, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 165, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 			if templ_7745c5c3_Err != nil {
@@ -424,7 +425,7 @@ func EditGroup(r *http.Request, group db.ProgramGroup) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(group.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 168, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 169, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 			if templ_7745c5c3_Err != nil {
@@ -436,7 +437,7 @@ func EditGroup(r *http.Request, group db.ProgramGroup) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Edit program group", "programs").Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Edit program group", "programs", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -484,7 +485,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 			var templ_7745c5c3_Var24 templ.SafeURL
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/programs/%d/edit", program.ID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 187, Col: 92}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 188, Col: 92}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -511,7 +512,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(group.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 194, Col: 45}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 195, Col: 45}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 					if templ_7745c5c3_Err != nil {
@@ -524,7 +525,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 					var templ_7745c5c3_Var26 string
 					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(group.Code)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 194, Col: 69}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 195, Col: 69}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 					if templ_7745c5c3_Err != nil {
@@ -537,7 +538,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 194, Col: 86}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 195, Col: 86}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
@@ -555,7 +556,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(group.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 196, Col: 45}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 197, Col: 45}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 					if templ_7745c5c3_Err != nil {
@@ -568,7 +569,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 					var templ_7745c5c3_Var29 string
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(group.Code)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 196, Col: 60}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 197, Col: 60}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -581,7 +582,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 					var templ_7745c5c3_Var30 string
 					templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 196, Col: 77}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 197, Col: 77}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 					if templ_7745c5c3_Err != nil {
@@ -600,7 +601,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(program.Code)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 203, Col: 84}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 204, Col: 84}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
@@ -613,7 +614,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(program.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 207, Col: 84}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 208, Col: 84}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -626,7 +627,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(program.DefaultHours))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 211, Col: 136}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/programs/views/views.templ`, Line: 212, Col: 136}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 			if templ_7745c5c3_Err != nil {
@@ -638,7 +639,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Edit program", "programs").Render(templ.WithChildren(ctx, templ_7745c5c3_Var23), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Edit program", "programs", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var23), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

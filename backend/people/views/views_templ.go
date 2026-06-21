@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
@@ -70,7 +71,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var3 templ.SafeURL
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/workers/%d", worker.ID)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 62, Col: 73}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 63, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -83,7 +84,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(worker.LastName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 62, Col: 112}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 63, Col: 112}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -96,7 +97,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(worker.FirstName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 62, Col: 133}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 63, Col: 133}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -109,7 +110,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(worker.Snils)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 64, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 65, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -122,7 +123,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(worker.Email)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 65, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 66, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -135,7 +136,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var8 templ.SafeURL
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/workers/%d/edit", worker.ID)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 67, Col: 111}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 68, Col: 111}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -172,7 +173,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(worker.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 93, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 94, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 				if templ_7745c5c3_Err != nil {
@@ -185,7 +186,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(worker.LastName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 93, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 94, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -198,7 +199,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(worker.FirstName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 93, Col: 88}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 94, Col: 88}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -221,7 +222,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(employer.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 101, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 102, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 				if templ_7745c5c3_Err != nil {
@@ -234,7 +235,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(employer.CanonicalName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 101, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 102, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -257,7 +258,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(assignment.WorkerLastName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 127, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 128, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -270,7 +271,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(assignment.WorkerFirstName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 127, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 128, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -283,7 +284,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(assignment.EmployerName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 128, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 129, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -296,7 +297,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(assignment.CurrentPosition)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 129, Col: 42}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 130, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -309,7 +310,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(assignment.Status)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 130, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 131, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -332,7 +333,7 @@ func List(r *http.Request, workers []db.Worker, employers []db.Employer, assignm
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Workers", "workers").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Workers", "workers", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -380,7 +381,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			var templ_7745c5c3_Var21 templ.SafeURL
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/workers/%d", worker.ID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 154, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 155, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -401,7 +402,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(worker.LastName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 158, Col: 96}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 159, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 			if templ_7745c5c3_Err != nil {
@@ -414,7 +415,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(worker.FirstName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 162, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 163, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 			if templ_7745c5c3_Err != nil {
@@ -427,7 +428,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(worker.MiddleName.String)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 166, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 167, Col: 109}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 			if templ_7745c5c3_Err != nil {
@@ -440,7 +441,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(worker.Snils)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 170, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 171, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 			if templ_7745c5c3_Err != nil {
@@ -453,7 +454,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(worker.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 174, Col: 98}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 175, Col: 98}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
@@ -465,7 +466,7 @@ func Edit(r *http.Request, worker db.Worker) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Edit worker", "workers").Render(templ.WithChildren(ctx, templ_7745c5c3_Var20), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Edit worker", "workers", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var20), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -513,7 +514,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(worker.LastName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 190, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 191, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {
@@ -526,7 +527,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(worker.FirstName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 190, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 191, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -539,7 +540,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(worker.MiddleName.String)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 190, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 191, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -552,7 +553,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(worker.Snils)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 195, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 196, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
@@ -565,7 +566,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(worker.SnilsNormalized)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 197, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 198, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -578,7 +579,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(worker.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 199, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 200, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 			if templ_7745c5c3_Err != nil {
@@ -591,7 +592,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(worker.BirthDate.String)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 201, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 202, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
@@ -604,7 +605,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			var templ_7745c5c3_Var36 templ.SafeURL
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/workers/%d/edit", worker.ID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 205, Col: 97}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 206, Col: 97}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 			if templ_7745c5c3_Err != nil {
@@ -632,7 +633,7 @@ func Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, 
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Worker", "workers").Render(templ.WithChildren(ctx, templ_7745c5c3_Var28), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Worker", "workers", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var28), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -674,7 +675,7 @@ func assignmentRow(r *http.Request, a db.WorkerEmployer, employers []db.Employer
 				var templ_7745c5c3_Var38 templ.SafeURL
 				templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/employers/%d", e.ID)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 243, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 244, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 				if templ_7745c5c3_Err != nil {
@@ -687,7 +688,7 @@ func assignmentRow(r *http.Request, a db.WorkerEmployer, employers []db.Employer
 				var templ_7745c5c3_Var39 string
 				templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(e.CanonicalName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 243, Col: 103}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 244, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 				if templ_7745c5c3_Err != nil {
@@ -706,7 +707,7 @@ func assignmentRow(r *http.Request, a db.WorkerEmployer, employers []db.Employer
 		var templ_7745c5c3_Var40 string
 		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(a.CurrentPosition)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 247, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 248, Col: 25}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 		if templ_7745c5c3_Err != nil {
@@ -719,7 +720,7 @@ func assignmentRow(r *http.Request, a db.WorkerEmployer, employers []db.Employer
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(a.Status)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 248, Col: 16}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 249, Col: 16}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 		if templ_7745c5c3_Err != nil {
@@ -737,7 +738,7 @@ func assignmentRow(r *http.Request, a db.WorkerEmployer, employers []db.Employer
 			var templ_7745c5c3_Var42 templ.SafeURL
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/workers/assignments/%d/deactivate", a.ID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 251, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `backend/people/views/views.templ`, Line: 252, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {

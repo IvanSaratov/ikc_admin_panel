@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
 )
 
 templ List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) {
-	@layouts.Shell("Programs", "programs") {
+	@layouts.Shell("Programs", "programs", admin.UserLoginFromContext(r.Context())) {
 		<div class="row row-cards">
 			<div class="col-12">
 				<div class="card">
@@ -151,7 +152,7 @@ templ List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) {
 }
 
 templ EditGroup(r *http.Request, group db.ProgramGroup) {
-	@layouts.Shell("Edit program group", "programs") {
+	@layouts.Shell("Edit program group", "programs", admin.UserLoginFromContext(r.Context())) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit program group</h3>
@@ -178,7 +179,7 @@ templ EditGroup(r *http.Request, group db.ProgramGroup) {
 }
 
 templ EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) {
-	@layouts.Shell("Edit program", "programs") {
+	@layouts.Shell("Edit program", "programs", admin.UserLoginFromContext(r.Context())) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit program</h3>
