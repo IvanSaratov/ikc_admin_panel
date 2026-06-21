@@ -19,10 +19,11 @@ import (
 // (session manager + CSRF middleware) into every request. Construct it
 // once in main.go and pass it to NewRouter.
 type Deps struct {
-	Database *sql.DB
-	Sessions *scs.SessionManager
-	CSRF     func(http.Handler) http.Handler
-	Log      *slog.Logger
+	Database  *sql.DB
+	Sessions  *scs.SessionManager
+	CSRF      func(http.Handler) http.Handler
+	LoginRate *admin.RateLimiter
+	Log       *slog.Logger
 }
 
 // NewRouter wires the application router with F3 auth baseline:
@@ -80,8 +81,17 @@ func NewRouter(deps Deps) http.Handler {
 	// Public auth endpoints. csrfField in the login form makes the POST
 	// safe; RequireAuth is intentionally NOT applied here so unauth'd
 	// users can reach the form.
+	//
+	// The login rate limiter sits BETWEEN csrf and the PostLogin handler
+	// so brute-force POSTs are rejected before the bcrypt path. The
+	// middleware is a no-op on every other route; see its docs.
 	router.Get("/login", adminHandler.GetLogin)
-	router.Post("/login", adminHandler.PostLogin)
+	if deps.LoginRate != nil {
+		router.With(admin.LoginRateLimitMiddleware(deps.LoginRate, deps.Log, auditSvc)).
+			Post("/login", adminHandler.PostLogin)
+	} else {
+		router.Post("/login", adminHandler.PostLogin)
+	}
 
 	// Protected group: everything else goes through auth.
 	router.Group(func(r chi.Router) {

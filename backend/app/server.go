@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/alexedwards/scs/v2"
@@ -38,11 +39,17 @@ func NewServer(addr string, database *sql.DB, log *slog.Logger) (*Server, error)
 		return nil, fmt.Errorf("load csrf: %w", err)
 	}
 
+	// Login rate limit: 10 attempts per IP per 5 minutes (sliding window).
+	// Defaults are hard-coded for the MVP — promote to env config when
+	// the multi-tenant deployment story lands.
+	loginRate := admin.NewRateLimiter(10, 5*time.Minute, nil)
+
 	handler := NewRouter(Deps{
-		Database: database,
-		Sessions: sessions,
-		CSRF:     csrfMW,
-		Log:      log,
+		Database:  database,
+		Sessions:  sessions,
+		CSRF:      csrfMW,
+		LoginRate: loginRate,
+		Log:       log,
 	})
 
 	return &Server{
