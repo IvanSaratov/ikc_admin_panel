@@ -37,3 +37,33 @@
 - `github.com/shabbyrobe/xmlwriter` — low-level XML emission for the Mintrud registry schema.
 - `github.com/go-resty/resty/v2` — HTTP client (used by Moodle client).
 - `github.com/mehanizm/iuliia-go`, `github.com/goodsign/monday`, `github.com/amonsat/fullname_parser` — text transliteration / date / FIO helpers.
+
+---
+
+## 2. XML package inventory
+
+**Package path:** `github.com/IvanSaratov/mintrud_generator/src/generator` (single package covers XML + DOCX; XML logic lives in `gen_xml.go`).
+
+**Domain types it consumes** (from `src/models`):
+- `RegistrySet`, `RegistryRecord`, `Worker`, `Organization`, `Test` — all in `models/xml.go`.
+- See exact field layout in the `xml:"..."` tags above.
+
+**Public entry point:**
+
+```go
+// gen_xml.go:16
+func GenerateXML(data *models.RegistrySet) ([]byte, error)
+```
+
+- **Input:** a `*models.RegistrySet` — a set of `RegistryRecord` entries (workers with embedded test/protocol data).
+- **Output:** UTF-8 byte slice (XML document, 4-space indent, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`).
+- **Errors:** propagated via `xmlwriter.ErrCollector`; returns the first error encountered (schema-shape or IO).
+- **Schema quirks** (per inline comments): every element uses `Full: true` so empty fields render as `<Tag></Tag>`, not `<Tag/>` — the Mintrud validator rejects self-closing tags for empty optional fields (e.g. blank middle name). `isPassed` is hardcoded `true` because unpassed rows are filtered at XLSX-read time.
+
+**External Go deps (this package only):**
+- `github.com/shabbyrobe/xmlwriter` — streaming XML writer with deferred error collection.
+- No other imports; pure stdlib `bytes` for the output buffer.
+
+**Coupling notes:**
+- The package has no DB / IO deps — fully unit-testable (see `gen_xml_test.go`).
+- Adapter responsibility: build `*models.RegistrySet` from our domain (DB rows in `audit_protocols`, `audit_workers`, `audit_programs`, `audit_employers`) — see §7.
