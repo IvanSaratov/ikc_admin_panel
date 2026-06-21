@@ -67,3 +67,43 @@ func GenerateXML(data *models.RegistrySet) ([]byte, error)
 **Coupling notes:**
 - The package has no DB / IO deps — fully unit-testable (see `gen_xml_test.go`).
 - Adapter responsibility: build `*models.RegistrySet` from our domain (DB rows in `audit_protocols`, `audit_workers`, `audit_programs`, `audit_employers`) — see §7.
+
+---
+
+## 3. DOCX package inventory
+
+**Package path:** same `github.com/IvanSaratov/mintrud_generator/src/generator` (file `gen_docx.go`). Function `CreateDocx` is exported alongside `GenerateXML`.
+
+**Public entry point:**
+
+```go
+// gen_docx.go:35
+func CreateDocx(
+    data *models.RegistrySet,
+    templatePath string,   // raw bytes of the DOCX template (NB: typed as string but used as []byte)
+    timeType string,       // one of "А", "Б", "В", "П", "С" — program category for hours lookup
+    log *logrus.Logger,
+) ([][]byte, error)
+```
+
+- **Input:** `*models.RegistrySet` (same as XML), a DOCX template (3 tables: header, commission, participants), a program-type key, and a logger.
+- **Output:** a slice of DOCX byte streams — one entry per `LearnProgramIdAttr` group, grouped by program and sorted by program ID for deterministic output ordering.
+- **Output is *not* zipped** — caller is responsible for ZIP wrapping (the legacy server does this; we need to do the same in the adapter).
+
+**Pipeline (worth understanding for integration):**
+
+1. **Stage 1 — placeholder substitution** via `github.com/lukasjarosch/go-docx` (raw XML replacement of `{placeholder}` tokens). Placeholders used: `people_count`, `user_program`, `program_time`, `protocol_number`, `protocol_date`, `education_start`, `education_end`. Dates are Russian-locale-formatted via `monday`.
+2. **Stage 2 — table-row insertion** via `github.com/fumiama/go-docx` (which can mutate OOXML structure but can't replace placeholders). Participants are appended to table index `2` (the third table, 8 columns: №, Организация, ФИО, Должность, Результат, Дата, Рег.номер, Подпись). Result column is hardcoded "удовл".
+3. **Stage 3 — sectPr restoration** via custom ZIP patching in `restoreSectPr` (lines 245-286): `fumiama/go-docx` strips `w:orient` and `pgMar` from `<w:sectPr>` during parse, so the code surgically re-injects the original sectPr from the template after writing.
+
+**External Go deps (DOCX path):**
+- `github.com/lukasjarosch/go-docx v0.5.0` — placeholder substitution.
+- `github.com/fumiama/go-docx v0.0.0-20240924153044-...` — table-row manipulation.
+- `github.com/goodsign/monday v1.0.2` — Russian date formatting.
+- `github.com/sirupsen/logrus v1.9.3` — logging.
+- No DB, no HTTP — but requires the DOCX template as a runtime byte blob. **The template itself is not in the repo** — we must obtain the legacy `protocol.docx` from the legacy maintainer.
+
+**Coupling notes / risks:**
+- Hardcoded "Times New Roman" font strings everywhere (line 137-144) — any new template must use this font.
+- `templatePath` parameter is misnamed: declared `string` but used as `[]byte`. We should rename to `template []byte` in the adapter wrapper.
+- `logrus.Logger` is a public dep — we'd inject our own logger or replace the call sites.
