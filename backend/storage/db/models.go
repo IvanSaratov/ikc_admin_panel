@@ -50,6 +50,26 @@ type GenerationRun struct {
 	CreatedAt    string         `json:"created_at"`
 }
 
+type Import struct {
+	ID              int64          `json:"id"`
+	SourceType      string         `json:"source_type"`
+	SourceFileName  sql.NullString `json:"source_file_name"`
+	SourceSha256    sql.NullString `json:"source_sha256"`
+	UploadedByActor string         `json:"uploaded_by_actor"`
+	ReceivedAt      string         `json:"received_at"`
+	Status          string         `json:"status"`
+	CreatedAt       string         `json:"created_at"`
+	UpdatedAt       string         `json:"updated_at"`
+}
+
+type ImportRow struct {
+	ID        int64  `json:"id"`
+	ImportID  int64  `json:"import_id"`
+	RowNumber int64  `json:"row_number"`
+	RawData   string `json:"raw_data"`
+	CreatedAt string `json:"created_at"`
+}
+
 type MoodleAccount struct {
 	ID           int64          `json:"id"`
 	WorkerID     int64          `json:"worker_id"`
@@ -98,6 +118,7 @@ type Protocol struct {
 	FixedAt              sql.NullString `json:"fixed_at"`
 	CreatedAt            string         `json:"created_at"`
 	UpdatedAt            string         `json:"updated_at"`
+	ProtocolSuffix       sql.NullString `json:"protocol_suffix"`
 }
 
 type ProtocolParticipant struct {
