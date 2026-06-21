@@ -1,6 +1,10 @@
 package requests
 
 import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -109,10 +113,16 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if !IsAcceptableUploadContentType(header.Header.Get("Content-Type")) {
 		// Fall through: the parser will still validate the bytes.
-		// We only flag the content-type as suspect.
+		// We only flag the content-type as suspect. Log a content
+		// fingerprint (sha256 + length) instead of the raw filename or
+		// Content-Type — both can carry control characters that would
+		// break structured log parsing (log injection vector).
+		// The hash is recomputed once the body is read; here we log
+		// the header bytes alone (no body yet).
 		h.log.Warn("upload with unusual content-type",
-			"filename", header.Filename,
-			"type", header.Header.Get("Content-Type"))
+			"content_type_hash", sha256Hex([]byte(header.Header.Get("Content-Type"))),
+			"filename_hash", sha256Hex([]byte(header.Filename)),
+		)
 	}
 
 	data, err := io.ReadAll(file)
@@ -185,10 +195,22 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 }
 
 // ApplyRow handles POST /requests/{id}/rows/{rowID}/apply.
+//
+// Authorization: the row must belong to the request in the URL. Without
+// this check, an authenticated operator could call
+// /requests/999/rows/<real-row-in-another-request>/apply and mutate rows
+// they can see but don't own. The frozen service signature
+// (ctx, requestRowID) doesn't take requestID — so we enforce ownership
+// here in the handler. On mismatch we return 404 (not 400) so existence
+// of the row in another request is not leaked.
 func (h *Handler) ApplyRow(w http.ResponseWriter, r *http.Request) {
 	requestID, rowID, err := h.parseRequestRowIDs(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.rowBelongsToRequest(r.Context(), requestID, rowID) {
+		http.NotFound(w, r)
 		return
 	}
 	if _, err := h.service.ApplyRow(r.Context(), rowID); err != nil {
@@ -199,11 +221,16 @@ func (h *Handler) ApplyRow(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/requests/%d", requestID), http.StatusSeeOther)
 }
 
-// SkipRow handles POST /requests/{id}/rows/{rowID}/skip.
+// SkipRow handles POST /requests/{id}/rows/{rowID}/skip. See ApplyRow
+// for the ownership-check rationale — SkipRow has the same shape.
 func (h *Handler) SkipRow(w http.ResponseWriter, r *http.Request) {
 	requestID, rowID, err := h.parseRequestRowIDs(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.rowBelongsToRequest(r.Context(), requestID, rowID) {
+		http.NotFound(w, r)
 		return
 	}
 	if _, err := h.service.SkipRow(r.Context(), rowID); err != nil {
@@ -212,6 +239,30 @@ func (h *Handler) SkipRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/requests/%d", requestID), http.StatusSeeOther)
+}
+
+// rowBelongsToRequest loads rowID and asserts its client_request_id
+// equals requestID. A missing row and a row owned by a different
+// request both return false — the caller maps both to 404 so existence
+// is not leaked to enumeration.
+func (h *Handler) rowBelongsToRequest(ctx context.Context, requestID, rowID int64) bool {
+	row, err := h.queries.GetRequestRow(ctx, rowID)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			h.log.Error("lookup request row for authz", "err", err)
+		}
+		return false
+	}
+	return row.ClientRequestID == requestID
+}
+
+// sha256Hex is a small logging helper that returns the hex sha256 of
+// the input bytes. Used to fingerprint uploaded Content-Type and
+// filename values without exposing attacker-controlled strings to the
+// log stream.
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // ----- helpers -----

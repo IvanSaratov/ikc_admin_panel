@@ -416,3 +416,119 @@ func TestE2E_UploadParseApply_AllEntitiesCreated(t *testing.T) {
 }
 
 func ns(v string) sql.NullString { return sql.NullString{String: v, Valid: true} }
+
+// TestApply_POST_RejectsForeignRow asserts the IDOR fix: a row owned by
+// request A must not be modifiable through the URL of request B.
+// Without the ownership check, any authenticated operator who knows
+// a row ID could apply/skip rows in other requests.
+//
+// 404 (not 400) is the correct status: a foreign row is indistinguishable
+// from a non-existent row to the operator — leaking 400 would confirm
+// that rowID exists in some other request.
+func TestApply_POST_RejectsForeignRow(t *testing.T) {
+	t.Parallel()
+	router, sm, queries, _ := mountTestRouter(t)
+	sessionCookie := authenticate(t, router, sm)
+
+	ctx := context.Background()
+	now := "2026-06-22T12:00:00Z"
+	// Two distinct requests.
+	reqA, err := queries.CreateClientRequest(ctx, storagedb.CreateClientRequestParams{
+		EmployerID: 1, ReceivedDate: "2026-06-15", SourceType: "xlsx",
+		SourceImportID: sql.NullInt64{}, Status: "review",
+		Notes: sql.NullString{}, CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("seed reqA: %v", err)
+	}
+	reqB, err := queries.CreateClientRequest(ctx, storagedb.CreateClientRequestParams{
+		EmployerID: 1, ReceivedDate: "2026-06-16", SourceType: "xlsx",
+		SourceImportID: sql.NullInt64{}, Status: "review",
+		Notes: sql.NullString{}, CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("seed reqB: %v", err)
+	}
+	// Row belongs to reqA; we will try to apply it via reqB's URL.
+	row, err := queries.CreateRequestRow(ctx, storagedb.CreateRequestRowParams{
+		ClientRequestID: reqA.ID, RowNumber: 1, RawData: "{}",
+		RawFullName: ns("Иванов Иван Иванович"),
+		ParsedLastName: ns("Иванов"), ParsedFirstName: ns("Иван"), ParsedMiddleName: ns("Иванович"),
+		ParsedSnils: ns("12345678900"), ParsedEmail: ns("ivanov@example.com"),
+		ParsedPosition: ns("Инженер"),
+		Status:    requests.RowStatusParsed,
+		CreatedAt: now, UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+
+	// Attempt: apply reqA's row through reqB's URL.
+	applyReq := httptest.NewRequest(http.MethodPost,
+		"/requests/"+strconv.FormatInt(reqB.ID, 10)+"/rows/"+strconv.FormatInt(row.ID, 10)+"/apply",
+		strings.NewReader(""))
+	applyReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	applyReq.Host = "example.com"
+	applyReq.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, applyReq)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 (ownership mismatch must look like 'not found')", rec.Code)
+	}
+
+	// The row must remain untouched.
+	got, err := queries.GetRequestRow(ctx, row.ID)
+	if err != nil {
+		t.Fatalf("get row: %v", err)
+	}
+	if got.Status != requests.RowStatusParsed {
+		t.Errorf("row status changed to %q through foreign URL — IDOR!", got.Status)
+	}
+}
+
+func TestSkip_POST_RejectsForeignRow(t *testing.T) {
+	t.Parallel()
+	router, sm, queries, _ := mountTestRouter(t)
+	sessionCookie := authenticate(t, router, sm)
+
+	ctx := context.Background()
+	now := "2026-06-22T12:00:00Z"
+	reqA, _ := queries.CreateClientRequest(ctx, storagedb.CreateClientRequestParams{
+		EmployerID: 1, ReceivedDate: "2026-06-15", SourceType: "xlsx",
+		SourceImportID: sql.NullInt64{}, Status: "review",
+		Notes: sql.NullString{}, CreatedAt: now, UpdatedAt: now,
+	})
+	reqB, _ := queries.CreateClientRequest(ctx, storagedb.CreateClientRequestParams{
+		EmployerID: 1, ReceivedDate: "2026-06-16", SourceType: "xlsx",
+		SourceImportID: sql.NullInt64{}, Status: "review",
+		Notes: sql.NullString{}, CreatedAt: now, UpdatedAt: now,
+	})
+	row, _ := queries.CreateRequestRow(ctx, storagedb.CreateRequestRowParams{
+		ClientRequestID: reqA.ID, RowNumber: 1, RawData: "{}",
+		RawFullName: ns("Петров Пётр"),
+		ParsedLastName: ns("Петров"), ParsedFirstName: ns("Пётр"),
+		ParsedSnils: ns("98765432100"), ParsedEmail: ns("petrov@example.com"),
+		ParsedPosition: ns("Менеджер"),
+		Status:    requests.RowStatusParsed,
+		CreatedAt: now, UpdatedAt: now,
+	})
+
+	skipReq := httptest.NewRequest(http.MethodPost,
+		"/requests/"+strconv.FormatInt(reqB.ID, 10)+"/rows/"+strconv.FormatInt(row.ID, 10)+"/skip",
+		strings.NewReader(""))
+	skipReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	skipReq.Host = "example.com"
+	skipReq.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, skipReq)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
+	}
+	got, _ := queries.GetRequestRow(ctx, row.ID)
+	if got.Status != requests.RowStatusParsed {
+		t.Errorf("row status changed to %q through foreign URL — IDOR!", got.Status)
+	}
+}
+
