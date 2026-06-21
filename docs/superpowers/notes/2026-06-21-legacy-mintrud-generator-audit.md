@@ -206,3 +206,29 @@ func (c *MClient) CheckCourseExist(courseID string) (bool, error)
 - HTTP base URL is hardcoded to look like `https://host/webservice/rest/server.php` (per README config example).
 
 **Why out of MVP scope:** the current Mintrud Admin MVP scope (per task brief) is XML/DOCX/XLSX — Moodle integration is the next phase. Recording the package so D3 can pick it up without re-investigation.
+
+---
+
+## 6. Integration recommendation
+
+**Pick: B — copy the `generator` package (and its dependencies `models`) into `backend/documents/legacy/`.**
+
+**Reasoning (4 sentences):** The legacy `mintrud_generator` is a private repo with a CLI bootstrap, a Windows-only MSI installer, a `gorilla/mux` HTTP server, a `logrus` logger, and a `urfave/cli` driver — none of which we want bleeding into our Echo + slog + Cobra-free backend. Option A (`go.mod` `replace` directive) would pull every file in the repo, including `installer/`, `src/server/`, `src/initiate/`, and transitive `logrus`/`resty` deps that conflict with our logging and HTTP choices. Option B lets us surgically copy only `src/generator/` and `src/models/`, vendor their minimal dep set (`shabbyrobe/xmlwriter`, `lukasjarosch/go-docx`, `fumiama/go-docx`, `goodsign/monday`, `xuri/excelize/v2`), and rewrite the 3-4 `logrus` calls to `log/slog`. XLSX and Moodle are deferred — they don't need copying yet. The cost is a one-time copy + a small adapter to remove `logrus`; the benefit is full control over deps, no transitive surprises, and a clean upgrade path if the legacy repo reorganizes.
+
+**Packages to copy (Option B):**
+1. `src/generator/` — `gen_xml.go`, `gen_docx.go` (and `gen_xml_test.go`).
+2. `src/models/` — `xml.go`, `moodle.go`, `consts.go`, `response.go`.
+3. After copy, rename the package to `legacy` (or `legacygen`) to avoid collision and signal "vendored, not maintained here." Put under `backend/documents/legacy/` with `package legacy`.
+
+**Vendor list (deps to add to our `go.mod` — these are minimal and stable):**
+- `github.com/shabbyrobe/xmlwriter`
+- `github.com/lukasjarosch/go-docx v0.5.0`
+- `github.com/fumiama/go-docx`
+- `github.com/goodsign/monday`
+- `github.com/xuri/excelize/v2 v2.9.0` (only if D3 decides XLSX export is needed later — NOT for MVP)
+
+**NOT copying (and why):**
+- `src/core/` — only used by `reader/xlsx.go` for `ConvertStringToNumber`; not needed for XML/DOCX.
+- `src/reader/` — out of MVP scope (see §4); revisit if bulk-import feature is requested.
+- `src/moodle/` — out of MVP scope (see §5).
+- `src/server/`, `src/initiate/`, `installer/`, `mintrud_generator.go` — replaced by our own.
