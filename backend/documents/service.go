@@ -148,3 +148,20 @@ func currentService() *Service {
 	defer defaultMu.RUnlock()
 	return defaultService
 }
+
+// generateXMLWith is the Service-aware entry point used by the top-level
+// GenerateXML wrapper. It exists so tests can call into the pipeline
+// without touching the package-level singleton — passing the Service
+// directly avoids the shared-state race when tests run in parallel.
+//
+// This is the single test seam; production code calls GenerateXML
+// (which uses the package-level default set in main.go via
+// SetDefaultService).
+func (s *Service) generateXMLWith(ctx context.Context, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error) {
+	return generateXMLImpl(ctx, s, q, protocolID)
+}
+
+// generateDOCXWith mirrors generateXMLWith for DOCX.
+func (s *Service) generateDOCXWith(ctx context.Context, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error) {
+	return generateDOCXImpl(ctx, s, q, protocolID)
+}

@@ -50,6 +50,13 @@ func newSlogAdapter(log *slog.Logger) FieldLogger {
 	return &slogAdapter{log: log}
 }
 
+// NewSlogAdapter is the exported alias of newSlogAdapter used by the
+// adapter layer (backend/documents/adapter_legacy.go) and by tests
+// that want to route legacy log output through slog.Default().
+func NewSlogAdapter() FieldLogger {
+	return newSlogAdapter(nil)
+}
+
 // Infof logs at LevelInfo with the formatted string as the message.
 func (a *slogAdapter) Infof(format string, args ...any) {
 	a.log.Info(fmt.Sprintf(format, args...))

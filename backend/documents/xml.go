@@ -23,20 +23,24 @@ import (
 //   - The legacy XML generator is called with the adapter's RegistrySet.
 //   - A generation_runs row is written with status='success' on the happy
 //     path and status='failed' if anything before the byte emission
-//     failed. The bytes are not returned when status is 'failed'.
+//     failed.
 //   - Audit log records both the "requested" and the "completed" / "failed"
 //     events.
 //
 // Returned GenerationRun may be nil when the call rejects at the protocol
-// status gate (so the caller does not need to delete the file it never
-// produced). The 'failed' status is recorded so the audit trail shows
-// the operator attempted generation.
+// status gate.
 func GenerateXML(ctx context.Context, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error) {
 	svc := currentService()
 	if svc == nil {
 		return nil, nil, errors.New("documents: default service not initialised (call SetDefaultService in main)")
 	}
+	return generateXMLImpl(ctx, svc, q, protocolID)
+}
 
+// generateXMLImpl is the Service-aware core. The top-level GenerateXML
+// wrapper is what production code uses; tests can call Service methods
+// directly (see Service.generateXMLWith) to avoid the shared global.
+func generateXMLImpl(ctx context.Context, svc *Service, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error) {
 	svc.recordAudit(ctx, "documents.generate.requested", protocolID, map[string]any{
 		"type": "xml",
 	})
@@ -61,7 +65,7 @@ func GenerateXML(ctx context.Context, q *storagedb.Queries, protocolID int64) ([
 		return nil, &run, fmt.Errorf("legacy generate xml: %w", err)
 	}
 
-	fileName := xmlFileName(protocolID)
+	fileName := xmlFileName(svc, protocolID)
 	run, err := svc.recordGenerationRun(ctx, protocolID, "xml", "success", fileName, "")
 	if err != nil {
 		// Bytes were produced successfully; the run is missing only as a
@@ -82,15 +86,15 @@ func GenerateXML(ctx context.Context, q *storagedb.Queries, protocolID int64) ([
 // xmlFileName produces a stable, sortable name like "protocol_42_2026-06-22T15-04-05Z.xml".
 // Using UTC timestamps keeps two re-generations from clobbering each other
 // when the operator hits the button twice in a row.
-func xmlFileName(protocolID int64) string {
-	now := currentService().now().UTC().Format("2006-01-02T15-04-05Z")
+func xmlFileName(svc *Service, protocolID int64) string {
+	now := svc.now().UTC().Format("2006-01-02T15-04-05Z")
 	return fmt.Sprintf("protocol_%d_%s.xml", protocolID, now)
 }
 
 // docxFileName is the matching helper for DOCX outputs. Exported so the
 // DOCX path uses the same naming convention.
-func docxFileName(protocolID int64) string {
-	now := currentService().now().UTC().Format("2006-01-02T15-04-05Z")
+func docxFileName(svc *Service, protocolID int64) string {
+	now := svc.now().UTC().Format("2006-01-02T15-04-05Z")
 	return fmt.Sprintf("protocol_%d_%s.zip", protocolID, now)
 }
 

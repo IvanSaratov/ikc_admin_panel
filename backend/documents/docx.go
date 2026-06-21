@@ -46,20 +46,16 @@ func ProtocolTemplate() ([]byte, error) {
 // Frozen signature per core MVP plan §0.2:
 //
 //	func GenerateDOCX(ctx, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error)
-//
-// Behaviour parallels GenerateXML:
-//   - Status must be >= fixed.
-//   - legacy.CreateDocx is called with the adapter's RegistrySet + the
-//     template bytes + a time-type key derived from the first program.
-//   - The slice of DOCX byte streams is wrapped in a single ZIP archive
-//     because that is what the browser downloads (one file, not many).
-//   - generation_runs row recorded as 'success' or 'failed'.
 func GenerateDOCX(ctx context.Context, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error) {
 	svc := currentService()
 	if svc == nil {
 		return nil, nil, errors.New("documents: default service not initialised (call SetDefaultService in main)")
 	}
+	return generateDOCXImpl(ctx, svc, q, protocolID)
+}
 
+// generateDOCXImpl is the Service-aware core; mirrors generateXMLImpl.
+func generateDOCXImpl(ctx context.Context, svc *Service, q *storagedb.Queries, protocolID int64) ([]byte, *GenerationRun, error) {
 	svc.recordAudit(ctx, "documents.generate.requested", protocolID, map[string]any{
 		"type": "docx",
 	})
@@ -74,6 +70,19 @@ func GenerateDOCX(ctx context.Context, q *storagedb.Queries, protocolID int64) (
 		return nil, &run, fmt.Errorf("render registry: %w", err)
 	}
 
+	// legacy.CreateDocx dereferences data.RegistryRecord[0] to build the
+	// placeholder map; refuse to call it on an empty registry so the
+	// caller sees a clean error rather than a runtime panic.
+	if len(registrySet.RegistryRecord) == 0 {
+		err := fmt.Errorf("protocol has no participants; add at least one before generating DOCX")
+		run, _ := svc.recordGenerationRun(ctx, protocolID, "docx", "failed", "", err.Error())
+		svc.recordAudit(ctx, "documents.generate.failed", protocolID, map[string]any{
+			"type": "docx",
+			"err":  err.Error(),
+		})
+		return nil, &run, err
+	}
+
 	template, err := ProtocolTemplate()
 	if err != nil {
 		run, _ := svc.recordGenerationRun(ctx, protocolID, "docx", "failed", "", err.Error())
@@ -84,10 +93,11 @@ func GenerateDOCX(ctx context.Context, q *storagedb.Queries, protocolID int64) (
 		return nil, &run, fmt.Errorf("load protocol template: %w", err)
 	}
 
-	// Determine the time-type key (А/Б/В/П/С) — we always use 'А' for
-	// now because the adapter doesn't expose program hours. Future
-	// enhancement: lift the program hours into the RegistryRecord so the
-	// mapping can be per-program.
+	// The time-type mapping in legacy lives at models.TIME_TO_TYPE and is
+	// keyed by Russian category code (А/Б/В/П/С). The adapter does not
+	// yet expose program hours, so we default to 'А' (the most generic
+	// 40h category). Future enhancement: lift hours into the
+	// RegistryRecord and pick the per-program code here.
 	timeType := "А"
 
 	parts, err := legacyCreateDocx(registrySet, template, timeType)
@@ -100,10 +110,7 @@ func GenerateDOCX(ctx context.Context, q *storagedb.Queries, protocolID int64) (
 		return nil, &run, fmt.Errorf("legacy create docx: %w", err)
 	}
 
-	// Wrap the slice of DOCX streams in a single ZIP archive. Filenames
-	// are derived from the program code on the matching RegistryRecord
-	// so multiple programs in one protocol produce distinct, human-
-	// readable archive entries.
+	// Wrap the slice of DOCX streams in a single ZIP archive.
 	zipped, err := zipDocs(registrySet, parts)
 	if err != nil {
 		run, _ := svc.recordGenerationRun(ctx, protocolID, "docx", "failed", "", err.Error())
@@ -114,7 +121,7 @@ func GenerateDOCX(ctx context.Context, q *storagedb.Queries, protocolID int64) (
 		return nil, &run, fmt.Errorf("zip docx parts: %w", err)
 	}
 
-	fileName := docxFileName(protocolID)
+	fileName := docxFileName(svc, protocolID)
 	run, err := svc.recordGenerationRun(ctx, protocolID, "docx", "success", fileName, "")
 	if err != nil {
 		svc.log.Error("insert generation_runs row after docx success", "protocol_id", protocolID, "err", err)
@@ -135,9 +142,7 @@ func GenerateDOCX(ctx context.Context, q *storagedb.Queries, protocolID int64) (
 // "protocol_N.docx" when no records are present.
 //
 // Each entry is stored uncompressed — DOCX is already a ZIP, so the
-// outer deflate overhead is wasted CPU. legacy.CreateDocx emits one
-// DOCX per program code; ZIPping them together is what operators expect
-// to download.
+// outer deflate overhead is wasted CPU.
 func zipDocs(registrySet *models.RegistrySet, parts [][]byte) ([]byte, error) {
 	if len(parts) == 0 {
 		return nil, errors.New("zipDocs: no DOCX parts to zip")
@@ -146,11 +151,6 @@ func zipDocs(registrySet *models.RegistrySet, parts [][]byte) ([]byte, error) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	// Build a sorted list of program codes that appear in the registry
-	// set so entry names match the order legacy.CreateDocx used to
-	// produce the parts slice. The legacy pipeline sorts the keys
-	// alphabetically; we mirror that here so archive entries line up
-	// with their DOCX payload.
 	programKeys := sortedProgramKeys(registrySet)
 
 	for i, part := range parts {
@@ -174,8 +174,7 @@ func zipDocs(registrySet *models.RegistrySet, parts [][]byte) ([]byte, error) {
 
 // sortedProgramKeys returns the unique LearnProgramIdAttr values from
 // the registry set, sorted alphabetically. The result matches the order
-// legacy.CreateDocx uses when iterating groups, so the i-th DOCX part
-// corresponds to the i-th key.
+// legacy.CreateDocx uses when iterating groups.
 func sortedProgramKeys(registrySet *models.RegistrySet) []string {
 	seen := map[string]bool{}
 	var keys []string
@@ -193,8 +192,6 @@ func sortedProgramKeys(registrySet *models.RegistrySet) []string {
 		seen[key] = true
 		keys = append(keys, key)
 	}
-	// In-place sort (small N; this is deterministic because the legacy
-	// pipeline does the same).
 	for i := 1; i < len(keys); i++ {
 		for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
 			keys[j-1], keys[j] = keys[j], keys[j-1]

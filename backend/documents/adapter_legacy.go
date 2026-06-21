@@ -195,10 +195,10 @@ var (
 // inlined into docx.go) preserves the adapter-layer rule: only files in
 // backend/documents/ that touch legacy/* are this one and xml.go.
 //
-// We pass nil as the logger so legacy.CreateDocx routes through the
-// slog default (see backend/documents/legacy/logadapter.go). Callers
-// that want to capture DOCX generation chatter for audit/diagnostics
-// should wire a real *slog.Logger into the default Service.
+// The slog adapter (see backend/documents/legacy/logadapter.go) wraps
+// the process slog default; passing it to the legacy FieldLogger keeps
+// the legacy code path identical to the upstream behaviour without
+// pulling logrus in.
 func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string) ([][]byte, error) {
 	if set == nil {
 		return nil, fmt.Errorf("legacyCreateDocx: nil registry set")
@@ -206,8 +206,5 @@ func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string)
 	if len(template) == 0 {
 		return nil, fmt.Errorf("legacyCreateDocx: empty template")
 	}
-	// legacy.CreateDocx declares templatePath as string but uses it as
-	// []byte internally; the type assertion is safe here because we
-	// control the input.
-	return legacy.CreateDocx(set, string(template), timeType, nil)
+	return legacy.CreateDocx(set, string(template), timeType, legacy.NewSlogAdapter())
 }
