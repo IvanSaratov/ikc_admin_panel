@@ -156,3 +156,53 @@ func ReadXLSX(
 - `fullname_parser` mapping quirk (above) — if D3 ever does need bulk-import, this must be preserved or re-tested.
 - `core.ConvertStringToNumber` lives in the same module — can't be used as a standalone import if we go with `go.mod replace` (it pulls the whole `core` package, including `logrus` setup).
 - Logic of "one record per (row, program)" (`xlsx.go:54-153`) is wasteful for our use case where DB rows are already 1:1 with workers per protocol.
+
+---
+
+## 5. Moodle package inventory (OUT OF MVP SCOPE)
+
+**Package path:** `github.com/IvanSaratov/mintrud_generator/src/moodle` (file `client.go`).
+
+**Client struct + constructor:**
+
+```go
+// client.go:26
+type MClient struct { /* unexported */ }
+
+func New(token, url string) *MClient
+```
+
+**Public methods:**
+
+```go
+// client.go:45 — create user (idnumber = SPEC_VALUE "mintrud" marker)
+func (c *MClient) CreateUser(user models.MUser) (*models.MUser, error)
+
+// client.go:94 — enrol user in a course with role id = 5 ("student"); 2-month window
+func (c *MClient) SetUserToCourse(userID, courseID string) error
+
+// client.go:122 — find user by username; (nil, nil) if not found (NOT an error)
+func (c *MClient) GetUsers(login string) (*models.MUser, error)
+
+// client.go:159 — verify course exists before enrolment (avoid cryptic Moodle errors)
+func (c *MClient) CheckCourseExist(courseID string) (bool, error)
+```
+
+**Moodle REST endpoints used:**
+- `core_user_create_users` — create accounts.
+- `core_user_get_users` — lookup by `username`.
+- `core_course_get_courses` — verify course IDs.
+- `enrol_manual_enrol_users` — enrol with `roleid=5`, `timestart=now`, `timeend=now+2mo`.
+
+**External Go deps:**
+- `github.com/go-resty/resty/v2 v2.16.5` — HTTP client with form/query-param helpers.
+- Internal `models.MUser`, `models.MoodleErrorResponse`, `models.SPEC_VALUE` (constant `"mintrud"`).
+- No logging dependency (logger is caller-supplied per the package's stated design).
+
+**Coupling notes / risks:**
+- `models.SPEC_VALUE = "mintrud"` is used as an ownership marker on `idnumber` — D3 must replicate this semantic if integrating, otherwise the existing legacy Moodle instance will lose its ability to identify auto-created accounts.
+- `LESSON_BY_ID` map in `models/consts.go` is hardcoded to specific Moodle course IDs — may be stale if Moodle content is reorganized.
+- `moodleStudentRoleID = "5"` assumes standard Moodle installation; non-standard deployments will need a config override.
+- HTTP base URL is hardcoded to look like `https://host/webservice/rest/server.php` (per README config example).
+
+**Why out of MVP scope:** the current Mintrud Admin MVP scope (per task brief) is XML/DOCX/XLSX — Moodle integration is the next phase. Recording the package so D3 can pick it up without re-investigation.
