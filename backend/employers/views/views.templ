@@ -2,12 +2,14 @@ package views
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
 )
 
-templ List(employers []db.Employer) {
+templ List(r *http.Request, employers []db.Employer) {
 	@layouts.Shell("Employers", "employers") {
 		<div class="card">
 			<div class="card-header">
@@ -15,7 +17,7 @@ templ List(employers []db.Employer) {
 			</div>
 			<div class="card-body">
 				<form method="post" action="/employers" class="row g-2 align-items-end">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<div class="col-12 col-md-3">
 						<label class="form-label" for="employer-inn">INN</label>
 						<input id="employer-inn" class="form-control" name="inn"/>
@@ -47,7 +49,7 @@ templ List(employers []db.Employer) {
 									<a class="btn btn-sm btn-link" href={ templ.SafeURL(fmt.Sprintf("/employers/%d", employer.ID)) }>Detail</a>
 									<a class="btn btn-sm btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/employers/%d/edit", employer.ID)) }>Edit</a>
 									<form method="post" action={ templ.SafeURL(fmt.Sprintf("/employers/%d/deactivate", employer.ID)) } class="d-inline">
-										// TODO(f3): add csrfField
+										@components.CSRFField(r)
 										<button class="btn btn-sm btn-warning" type="submit">Deactivate</button>
 									</form>
 								</td>
@@ -65,7 +67,7 @@ templ List(employers []db.Employer) {
 	}
 }
 
-templ Edit(employer db.Employer) {
+templ Edit(r *http.Request, employer db.Employer) {
 	@layouts.Shell("Edit employer", "employers") {
 		<div class="card">
 			<div class="card-header">
@@ -73,7 +75,7 @@ templ Edit(employer db.Employer) {
 			</div>
 			<div class="card-body">
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/employers/%d", employer.ID)) } class="row g-2 align-items-end">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<div class="col-12 col-md-3">
 						<label class="form-label" for="employer-inn">INN</label>
 						<input id="employer-inn" class="form-control" name="inn" value={ employer.Inn }/>
@@ -92,7 +94,7 @@ templ Edit(employer db.Employer) {
 	}
 }
 
-templ Detail(employer db.Employer, assignments []db.WorkerEmployer) {
+templ Detail(r *http.Request, employer db.Employer, assignments []db.WorkerEmployer) {
 	@layouts.Shell("Employer", "employers") {
 		<div class="card mb-3">
 			<div class="card-header">
@@ -109,7 +111,7 @@ templ Detail(employer db.Employer, assignments []db.WorkerEmployer) {
 			<div class="card-footer text-end">
 				<a class="btn btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/employers/%d/edit", employer.ID)) }>Edit</a>
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/employers/%d/deactivate", employer.ID)) } class="d-inline">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<button class="btn btn-warning" type="submit">Deactivate</button>
 				</form>
 			</div>

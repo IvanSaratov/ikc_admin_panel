@@ -458,15 +458,17 @@ func authedGET(t *testing.T, router http.Handler, path string, cookies []*http.C
 
 func authedPOST(t *testing.T, router http.Handler, path string, body string, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
-	var csrfToken string
-	for _, c := range cookies {
-		if c.Name == "csrf_token" {
-			csrfToken = c.Value
-		}
+
+	// gorilla/csrf masks the token per-request, so we must GET the page
+	// that contains the form first, parse the masked token out of the
+	// rendered HTML, and then POST with that exact token. The CSRF
+	// cookie itself (set by the middleware) carries the unmasked base
+	// token; the form field carries (OTP XOR base) for that render.
+	pageRec := authedGET(t, router, formReferrerPath(path), cookies)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("GET for CSRF page: status %d body %s", pageRec.Code, pageRec.Body.String())
 	}
-	if csrfToken == "" {
-		t.Fatalf("no csrf token in cookies")
-	}
+	token := extractCSRFToken(t, pageRec.Body.String())
 
 	form := url.Values{}
 	if body != "" {
@@ -483,7 +485,7 @@ func authedPOST(t *testing.T, router http.Handler, path string, body string, coo
 			}
 		}
 	}
-	form.Set("csrf_token", csrfToken)
+	form.Set("csrf_token", token)
 
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -496,6 +498,59 @@ func authedPOST(t *testing.T, router http.Handler, path string, body string, coo
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+// formReferrerPath maps a POST target back to the page that renders the
+// form. For list-page POSTs this is the list URL; for per-row POSTs
+// (deactivate / edit) we use the list URL too — same domain.
+func formReferrerPath(path string) string {
+	switch {
+	case path == "/login":
+		return "/login"
+	case path == "/programs/groups":
+		return "/programs"
+	case path == "/programs":
+		return "/programs"
+	case path == "/employers":
+		return "/employers"
+	case path == "/workers":
+		return "/workers"
+	case path == "/workers/assignments":
+		return "/workers"
+	case strings.HasPrefix(path, "/programs/"):
+		// /programs/groups/{id}/edit, /programs/groups/{id}/deactivate,
+		// /programs/{id}/edit, /programs/{id}/deactivate — list page.
+		return "/programs"
+	case strings.HasPrefix(path, "/employers/"):
+		// /employers/{id} (POST is the edit endpoint), deactivate, etc.
+		return "/employers"
+	case strings.HasPrefix(path, "/workers/"):
+		return "/workers"
+	default:
+		return path
+	}
+}
+
+// extractCSRFToken pulls the value attribute out of the hidden
+// <input type="hidden" name="csrf_token" value="..."> field rendered
+// by components.CSRFField.
+func extractCSRFToken(t *testing.T, body string) string {
+	t.Helper()
+	idx := strings.Index(body, `name="csrf_token"`)
+	if idx < 0 {
+		t.Fatalf("body has no csrf_token field: %s", body)
+	}
+	rest := body[idx:]
+	valIdx := strings.Index(rest, `value="`)
+	if valIdx < 0 {
+		t.Fatalf("csrf_token field has no value: %s", rest)
+	}
+	rest = rest[valIdx+len(`value="`):]
+	endIdx := strings.Index(rest, `"`)
+	if endIdx < 0 {
+		t.Fatalf("csrf_token value not terminated: %s", rest)
+	}
+	return rest[:endIdx]
 }
 
 // _ keeps the csrf package referenced when future tests need it directly.

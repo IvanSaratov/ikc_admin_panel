@@ -36,7 +36,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	views.List(workers, employers, assignments).Render(r.Context(), w)
+	views.List(r, workers, employers, assignments).Render(r.Context(), w)
 }
 
 func (h *Handler) CreateWorker(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +82,7 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	views.Detail(worker, assignments, employers).Render(r.Context(), w)
+	views.Detail(r, worker, assignments, employers).Render(r.Context(), w)
 }
 
 func (h *Handler) Edit(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +99,7 @@ func (h *Handler) Edit(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "worker not found", http.StatusNotFound)
 			return
 		}
-		views.Edit(worker).Render(r.Context(), w)
+		views.Edit(r, worker).Render(r.Context(), w)
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "parse form", http.StatusBadRequest)

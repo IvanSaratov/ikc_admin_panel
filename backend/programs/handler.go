@@ -32,7 +32,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	views.List(groups, programs).Render(ctx, w)
+	views.List(r, groups, programs).Render(ctx, w)
 }
 
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +67,7 @@ func (h *Handler) EditGroup(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "group not found", http.StatusNotFound)
 			return
 		}
-		views.EditGroup(group).Render(r.Context(), w)
+		views.EditGroup(r, group).Render(r.Context(), w)
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "parse form", http.StatusBadRequest)
@@ -151,7 +151,7 @@ func (h *Handler) EditProgram(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "list groups", http.StatusInternalServerError)
 			return
 		}
-		views.EditProgram(program, groups).Render(r.Context(), w)
+		views.EditProgram(r, program, groups).Render(r.Context(), w)
 	case http.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "parse form", http.StatusBadRequest)
