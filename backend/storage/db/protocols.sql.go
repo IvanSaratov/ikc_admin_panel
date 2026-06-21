@@ -300,19 +300,23 @@ SELECT MAX(annual_sequence_number) AS max_seq
 FROM protocols
 WHERE program_group_id = ?
   AND sequence_year = ?
+  AND COALESCE(protocol_suffix, '') = ?
   AND annual_sequence_number IS NOT NULL
 `
 
 type MaxAnnualSequenceForGroupYearParams struct {
-	ProgramGroupID int64         `json:"program_group_id"`
-	SequenceYear   sql.NullInt64 `json:"sequence_year"`
+	ProgramGroupID int64          `json:"program_group_id"`
+	SequenceYear   sql.NullInt64  `json:"sequence_year"`
+	ProtocolSuffix sql.NullString `json:"protocol_suffix"`
 }
 
-// Returns the highest annual_sequence_number already used for a (group, year)
-// pair. Returns NULL when no fixed protocol exists yet for that pair; the
+// Returns the highest annual_sequence_number already used for a (group, year,
+// suffix) triple. The COALESCE on protocol_suffix is mirrored on the unique
+// index in 002_schema_cleanup so the same seq can be reused across suffixes.
+// Returns NULL when no fixed protocol exists yet for that triple; the
 // service treats NULL as 0 and adds 1 to assign the next slot.
 func (q *Queries) MaxAnnualSequenceForGroupYear(ctx context.Context, arg MaxAnnualSequenceForGroupYearParams) (interface{}, error) {
-	row := q.db.QueryRowContext(ctx, maxAnnualSequenceForGroupYear, arg.ProgramGroupID, arg.SequenceYear)
+	row := q.db.QueryRowContext(ctx, maxAnnualSequenceForGroupYear, arg.ProgramGroupID, arg.SequenceYear, arg.ProtocolSuffix)
 	var max_seq interface{}
 	err := row.Scan(&max_seq)
 	return max_seq, err

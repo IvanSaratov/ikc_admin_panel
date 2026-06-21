@@ -264,8 +264,11 @@ func (s *Service) Fix(ctx context.Context, protocolID int64, in FixInput) (stora
 		}
 	}
 
-	// nextSequenceLocked runs against the transaction-bound facade.
-	next, err := nextSequenceLocked(ctx, txQueries, existing.ProgramGroupID, year64)
+	// nextSequenceLocked runs against the transaction-bound facade. The
+	// suffix is part of the (group, year, seq) uniqueness key so passing
+	// it here ensures a "1" suffix picks up the same seq=1 slot as the
+	// no-suffix row (different COALESCE values, so they don't collide).
+	next, err := nextSequenceLocked(ctx, txQueries, existing.ProgramGroupID, year64, suffix)
 	if err != nil {
 		return storagedb.Protocol{}, err
 	}

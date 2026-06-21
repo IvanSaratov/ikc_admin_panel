@@ -76,11 +76,14 @@ RETURNING id, program_group_id, status, training_start_date, training_end_date,
           protocol_number, fixed_at, created_at, updated_at, protocol_suffix;
 
 -- name: MaxAnnualSequenceForGroupYear :one
--- Returns the highest annual_sequence_number already used for a (group, year)
--- pair. Returns NULL when no fixed protocol exists yet for that pair; the
+-- Returns the highest annual_sequence_number already used for a (group, year,
+-- suffix) triple. The COALESCE on protocol_suffix is mirrored on the unique
+-- index in 002_schema_cleanup so the same seq can be reused across suffixes.
+-- Returns NULL when no fixed protocol exists yet for that triple; the
 -- service treats NULL as 0 and adds 1 to assign the next slot.
 SELECT MAX(annual_sequence_number) AS max_seq
 FROM protocols
 WHERE program_group_id = ?
   AND sequence_year = ?
+  AND COALESCE(protocol_suffix, '') = ?
   AND annual_sequence_number IS NOT NULL;

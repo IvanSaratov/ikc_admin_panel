@@ -81,17 +81,22 @@ func FormatProtocolNumber(year, month int, seq int64, suffix string) string {
 }
 
 // nextSequenceLocked returns the next annual sequence number for a
-// (program_group_id, sequence_year) pair. The caller is expected to hold a
-// transaction so the read-then-write isn't raced. Returns 1 when no fixed
-// protocol exists yet for that pair.
+// (program_group_id, sequence_year, suffix) triple. The caller is expected
+// to hold a transaction so the read-then-write isn't raced. Returns 1 when
+// no fixed protocol exists yet for that triple.
+//
+// The COALESCE on the suffix mirrors the unique index from
+// 002_schema_cleanup, so an empty suffix slots in next to a "1" suffix
+// without colliding (each gets its own sequence number per group/year).
 //
 // The MaxAnnualSequenceForGroupYear query returns interface{} because sqlc
 // cannot infer the column type for a MAX() over a nullable column; we
 // type-switch defensively.
-func nextSequenceLocked(ctx context.Context, q *storagedb.Queries, programGroupID int64, year int64) (int64, error) {
+func nextSequenceLocked(ctx context.Context, q *storagedb.Queries, programGroupID int64, year int64, suffix string) (int64, error) {
 	max, err := q.MaxAnnualSequenceForGroupYear(ctx, storagedb.MaxAnnualSequenceForGroupYearParams{
 		ProgramGroupID: programGroupID,
 		SequenceYear:   sql.NullInt64{Int64: year, Valid: true},
+		ProtocolSuffix: sql.NullString{String: suffix, Valid: true},
 	})
 	if err != nil {
 		return 0, fmt.Errorf("read max sequence: %w", err)
