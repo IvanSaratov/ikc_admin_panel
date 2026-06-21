@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -10,8 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/app"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
+	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 )
 
 func main() {
@@ -36,6 +39,18 @@ func run() error {
 	defer database.Close()
 
 	if err := storage.Migrate(database); err != nil {
+		return err
+	}
+
+	queries := storagedb.New(database)
+	if err := admin.EnsureBootstrapAdmin(ctx, admin.NewStore(queries), queries, os.Getenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD")); err != nil {
+		if errors.Is(err, admin.ErrBootstrapPasswordMissing) {
+			// Surface as a clear stderr message and exit non-zero so an
+			// operator running under systemd / docker immediately sees
+			// what to do.
+			fmt.Fprintln(os.Stderr, "FATAL: "+err.Error())
+			os.Exit(1)
+		}
 		return err
 	}
 
