@@ -37,3 +37,217 @@
 - `github.com/shabbyrobe/xmlwriter` — low-level XML emission for the Mintrud registry schema.
 - `github.com/go-resty/resty/v2` — HTTP client (used by Moodle client).
 - `github.com/mehanizm/iuliia-go`, `github.com/goodsign/monday`, `github.com/amonsat/fullname_parser` — text transliteration / date / FIO helpers.
+
+---
+
+## 2. XML package inventory
+
+**Package path:** `github.com/IvanSaratov/mintrud_generator/src/generator` (single package covers XML + DOCX; XML logic lives in `gen_xml.go`).
+
+**Domain types it consumes** (from `src/models`):
+- `RegistrySet`, `RegistryRecord`, `Worker`, `Organization`, `Test` — all in `models/xml.go`.
+- See exact field layout in the `xml:"..."` tags above.
+
+**Public entry point:**
+
+```go
+// gen_xml.go:16
+func GenerateXML(data *models.RegistrySet) ([]byte, error)
+```
+
+- **Input:** a `*models.RegistrySet` — a set of `RegistryRecord` entries (workers with embedded test/protocol data).
+- **Output:** UTF-8 byte slice (XML document, 4-space indent, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`).
+- **Errors:** propagated via `xmlwriter.ErrCollector`; returns the first error encountered (schema-shape or IO).
+- **Schema quirks** (per inline comments): every element uses `Full: true` so empty fields render as `<Tag></Tag>`, not `<Tag/>` — the Mintrud validator rejects self-closing tags for empty optional fields (e.g. blank middle name). `isPassed` is hardcoded `true` because unpassed rows are filtered at XLSX-read time.
+
+**External Go deps (this package only):**
+- `github.com/shabbyrobe/xmlwriter` — streaming XML writer with deferred error collection.
+- No other imports; pure stdlib `bytes` for the output buffer.
+
+**Coupling notes:**
+- The package has no DB / IO deps — fully unit-testable (see `gen_xml_test.go`).
+- Adapter responsibility: build `*models.RegistrySet` from our domain (DB rows in `audit_protocols`, `audit_workers`, `audit_programs`, `audit_employers`) — see §7.
+
+---
+
+## 3. DOCX package inventory
+
+**Package path:** same `github.com/IvanSaratov/mintrud_generator/src/generator` (file `gen_docx.go`). Function `CreateDocx` is exported alongside `GenerateXML`.
+
+**Public entry point:**
+
+```go
+// gen_docx.go:35
+func CreateDocx(
+    data *models.RegistrySet,
+    templatePath string,   // raw bytes of the DOCX template (NB: typed as string but used as []byte)
+    timeType string,       // one of "А", "Б", "В", "П", "С" — program category for hours lookup
+    log *logrus.Logger,
+) ([][]byte, error)
+```
+
+- **Input:** `*models.RegistrySet` (same as XML), a DOCX template (3 tables: header, commission, participants), a program-type key, and a logger.
+- **Output:** a slice of DOCX byte streams — one entry per `LearnProgramIdAttr` group, grouped by program and sorted by program ID for deterministic output ordering.
+- **Output is *not* zipped** — caller is responsible for ZIP wrapping (the legacy server does this; we need to do the same in the adapter).
+
+**Pipeline (worth understanding for integration):**
+
+1. **Stage 1 — placeholder substitution** via `github.com/lukasjarosch/go-docx` (raw XML replacement of `{placeholder}` tokens). Placeholders used: `people_count`, `user_program`, `program_time`, `protocol_number`, `protocol_date`, `education_start`, `education_end`. Dates are Russian-locale-formatted via `monday`.
+2. **Stage 2 — table-row insertion** via `github.com/fumiama/go-docx` (which can mutate OOXML structure but can't replace placeholders). Participants are appended to table index `2` (the third table, 8 columns: №, Организация, ФИО, Должность, Результат, Дата, Рег.номер, Подпись). Result column is hardcoded "удовл".
+3. **Stage 3 — sectPr restoration** via custom ZIP patching in `restoreSectPr` (lines 245-286): `fumiama/go-docx` strips `w:orient` and `pgMar` from `<w:sectPr>` during parse, so the code surgically re-injects the original sectPr from the template after writing.
+
+**External Go deps (DOCX path):**
+- `github.com/lukasjarosch/go-docx v0.5.0` — placeholder substitution.
+- `github.com/fumiama/go-docx v0.0.0-20240924153044-...` — table-row manipulation.
+- `github.com/goodsign/monday v1.0.2` — Russian date formatting.
+- `github.com/sirupsen/logrus v1.9.3` — logging.
+- No DB, no HTTP — but requires the DOCX template as a runtime byte blob. **The template itself is not in the repo** — we must obtain the legacy `protocol.docx` from the legacy maintainer.
+
+**Coupling notes / risks:**
+- Hardcoded "Times New Roman" font strings everywhere (line 137-144) — any new template must use this font.
+- `templatePath` parameter is misnamed: declared `string` but used as `[]byte`. We should rename to `template []byte` in the adapter wrapper.
+- `logrus.Logger` is a public dep — we'd inject our own logger or replace the call sites.
+
+---
+
+## 4. XLSX package inventory
+
+**Package path:** `github.com/IvanSaratov/mintrud_generator/src/reader` (file `xlsx.go`).
+
+**Public entry point:**
+
+```go
+// xlsx.go:34
+func ReadXLSX(
+    fileContent *bytes.Buffer,        // uploaded XLSX file
+    table string,                     // worksheet name
+    positions string,                 // comma-separated row numbers, e.g. "1,3-5,8"
+    programs []string,                // program IDs (matches models.LESSON_BY_NAME keys)
+    org *models.Organization,         // default org stamped on every record
+    log *logrus.Logger,
+) (*models.RegistrySet, error)
+```
+
+- **Input:** XLSX byte stream + sheet name + 1-based row positions + program IDs.
+- **Output:** a `*models.RegistrySet` ready for `GenerateXML` or `CreateDocx`.
+- **Use case in legacy:** bulk-import mode via web UI (admin uploads XLSX, picks rows, picks programs, hits a button). **Our admin panel does not need this path** — workers, programs, and protocols are already in our DB (PostgreSQL). XLSX package is therefore **out of MVP scope**. Recorded for parity and possible future bulk-import feature.
+
+**Column contract (from comments):**
+
+| Col | Meaning                                          |
+|-----|--------------------------------------------------|
+| A   | Employer title                                   |
+| B   | Employer INN                                     |
+| C   | Full FIO (free-form, parsed by `fullname_parser`)|
+| D   | Position                                         |
+| F   | SNILS (blank = foreign worker)                   |
+| G   | Protocol number                                  |
+| H   | Protocol date (`1-2-06` → `2-1-2006`)            |
+| J   | Education period (`01.01.2024-12.12.2024`)       |
+| L   | Email (optional, warns if missing)              |
+
+**External Go deps (XLSX path):**
+- `github.com/xuri/excelize/v2 v2.9.0` — XLSX read/write.
+- `github.com/amonsat/fullname_parser` — Russian FIO parser (note the **inverted** field semantics: `parsed.First` → LastName, `parsed.Middle` → FirstName, `parsed.Last` → FirstName or MiddleName; see xlsx.go:86-94 inline comment).
+- `github.com/sirupsen/logrus v1.9.3` — logging.
+- `github.com/IvanSaratov/mintrud_generator/src/core` — internal helper `ConvertStringToNumber` (parses "1,3-5,8" into `[]int`).
+
+**Coupling notes / risks:**
+- `fullname_parser` mapping quirk (above) — if D3 ever does need bulk-import, this must be preserved or re-tested.
+- `core.ConvertStringToNumber` lives in the same module — can't be used as a standalone import if we go with `go.mod replace` (it pulls the whole `core` package, including `logrus` setup).
+- Logic of "one record per (row, program)" (`xlsx.go:54-153`) is wasteful for our use case where DB rows are already 1:1 with workers per protocol.
+
+---
+
+## 5. Moodle package inventory (OUT OF MVP SCOPE)
+
+**Package path:** `github.com/IvanSaratov/mintrud_generator/src/moodle` (file `client.go`).
+
+**Client struct + constructor:**
+
+```go
+// client.go:26
+type MClient struct { /* unexported */ }
+
+func New(token, url string) *MClient
+```
+
+**Public methods:**
+
+```go
+// client.go:45 — create user (idnumber = SPEC_VALUE "mintrud" marker)
+func (c *MClient) CreateUser(user models.MUser) (*models.MUser, error)
+
+// client.go:94 — enrol user in a course with role id = 5 ("student"); 2-month window
+func (c *MClient) SetUserToCourse(userID, courseID string) error
+
+// client.go:122 — find user by username; (nil, nil) if not found (NOT an error)
+func (c *MClient) GetUsers(login string) (*models.MUser, error)
+
+// client.go:159 — verify course exists before enrolment (avoid cryptic Moodle errors)
+func (c *MClient) CheckCourseExist(courseID string) (bool, error)
+```
+
+**Moodle REST endpoints used:**
+- `core_user_create_users` — create accounts.
+- `core_user_get_users` — lookup by `username`.
+- `core_course_get_courses` — verify course IDs.
+- `enrol_manual_enrol_users` — enrol with `roleid=5`, `timestart=now`, `timeend=now+2mo`.
+
+**External Go deps:**
+- `github.com/go-resty/resty/v2 v2.16.5` — HTTP client with form/query-param helpers.
+- Internal `models.MUser`, `models.MoodleErrorResponse`, `models.SPEC_VALUE` (constant `"mintrud"`).
+- No logging dependency (logger is caller-supplied per the package's stated design).
+
+**Coupling notes / risks:**
+- `models.SPEC_VALUE = "mintrud"` is used as an ownership marker on `idnumber` — D3 must replicate this semantic if integrating, otherwise the existing legacy Moodle instance will lose its ability to identify auto-created accounts.
+- `LESSON_BY_ID` map in `models/consts.go` is hardcoded to specific Moodle course IDs — may be stale if Moodle content is reorganized.
+- `moodleStudentRoleID = "5"` assumes standard Moodle installation; non-standard deployments will need a config override.
+- HTTP base URL is hardcoded to look like `https://host/webservice/rest/server.php` (per README config example).
+
+**Why out of MVP scope:** the current Mintrud Admin MVP scope (per task brief) is XML/DOCX/XLSX — Moodle integration is the next phase. Recording the package so D3 can pick it up without re-investigation.
+
+---
+
+## 6. Integration recommendation
+
+**Pick: B — copy the `generator` package (and its dependencies `models`) into `backend/documents/legacy/`.**
+
+**Reasoning (4 sentences):** The legacy `mintrud_generator` is a private repo with a CLI bootstrap, a Windows-only MSI installer, a `gorilla/mux` HTTP server, a `logrus` logger, and a `urfave/cli` driver — none of which we want bleeding into our Echo + slog + Cobra-free backend. Option A (`go.mod` `replace` directive) would pull every file in the repo, including `installer/`, `src/server/`, `src/initiate/`, and transitive `logrus`/`resty` deps that conflict with our logging and HTTP choices. Option B lets us surgically copy only `src/generator/` and `src/models/`, vendor their minimal dep set (`shabbyrobe/xmlwriter`, `lukasjarosch/go-docx`, `fumiama/go-docx`, `goodsign/monday`, `xuri/excelize/v2`), and rewrite the 3-4 `logrus` calls to `log/slog`. XLSX and Moodle are deferred — they don't need copying yet. The cost is a one-time copy + a small adapter to remove `logrus`; the benefit is full control over deps, no transitive surprises, and a clean upgrade path if the legacy repo reorganizes.
+
+**Packages to copy (Option B):**
+1. `src/generator/` — `gen_xml.go`, `gen_docx.go` (and `gen_xml_test.go`).
+2. `src/models/` — `xml.go`, `moodle.go`, `consts.go`, `response.go`.
+3. After copy, rename the package to `legacy` (or `legacygen`) to avoid collision and signal "vendored, not maintained here." Put under `backend/documents/legacy/` with `package legacy`.
+
+**Vendor list (deps to add to our `go.mod` — these are minimal and stable):**
+- `github.com/shabbyrobe/xmlwriter`
+- `github.com/lukasjarosch/go-docx v0.5.0`
+- `github.com/fumiama/go-docx`
+- `github.com/goodsign/monday`
+- `github.com/xuri/excelize/v2 v2.9.0` (only if D3 decides XLSX export is needed later — NOT for MVP)
+
+**NOT copying (and why):**
+- `src/core/` — only used by `reader/xlsx.go` for `ConvertStringToNumber`; not needed for XML/DOCX.
+- `src/reader/` — out of MVP scope (see §4); revisit if bulk-import feature is requested.
+- `src/moodle/` — out of MVP scope (see §5).
+- `src/server/`, `src/initiate/`, `installer/`, `mintrud_generator.go` — replaced by our own.
+
+---
+
+## 7. Adapter sketch (`backend/documents/adapter_legacy.go`)
+
+A single Go file in our `backend/documents/` package, no exported types from the adapter (all functions return raw bytes or write to `io.Writer`). Three entry points: `RenderRegistryXML(ctx, protocolIDs []int64) ([]byte, error)` for XML, `RenderProtocolDocs(ctx, protocolIDs []int64) ([][]byte, error)` for DOCX (caller zips them), and (later) `RenderImportXLSX(ctx, r io.Reader) ([]int64, error)` for bulk import. The adapter takes a service-layer function (typically already provided by the audit service for F1) that returns `[]*AuditProtocol` with eager-loaded `Worker`, `Employer`, `Program`, `Organization` and translates each row into a `*models.RegistryRecord` — populating `Worker.{LastName, FirstName, MiddleName, Snils, Position, EmployerInn, EmployerTitle, IsForeignSnils}`, `Organization.{Inn, Title}`, `Test.{Date, ProtocolNumber, LearnProgramTitle, LearnProgramIdAttr, EducationStart, EducationEnd}`, and setting `IsPassedAttr = "true"`. After translation, it calls `legacy.GenerateXML(registrySet)` and `legacy.CreateDocx(registrySet, templateBytes, timeTypeKey, ourLoggerAdapter)`. The DOCX template bytes come from a new `documents.ProtocolTemplate()` helper that loads `protocol.docx` from `backend/documents/templates/` (we need to obtain this template from the legacy maintainer — see §8). Time-type mapping (`models.TIME_TO_TYPE`) must be sourced from our `audit_programs.category` column (a 1-char code: А/Б/В/П/С). The adapter must also strip the `logrus.Logger` parameter from `CreateDocx`; the cheapest path is a thin shim `type slogAdapter struct{ *slog.Logger }` with an `Infof/Debugf/Warnf/Errorf` method set, satisfying `logrus.FieldLogger` by interface assertion — or, if `logrus` proves unavoidable, just add it as a dep.
+
+---
+
+## 8. Open questions for D3
+
+- **DOCX template asset.** The legacy `protocol.docx` (the file with the 3 tables referenced in §3) is **not in the repo** — needs to be obtained from the legacy maintainer (Ivan Saratov) or extracted from a running legacy build. Without it, DOCX generation is blocked.
+- **`logrus` dependency removal.** Should we (a) vendor `logrus` just for the 3-4 log calls in `gen_docx.go`, or (b) rewrite the calls to `slog` before copy? Option (b) is cleaner but option (a) is faster and keeps the legacy diff minimal. Recommend (b) — the rewrite is mechanical (4 calls, 2 formats).
+- **`templatePath` parameter type.** Legacy declares it as `string` but uses it as `[]byte` (see §3 note). Should the adapter normalize to `[]byte` at the call site, or should we patch the copy before integrating? Recommend patching the copy during the vendor step.
+- **Schema validation.** `gen_xml.go` uses `xmlwriter` but does not validate against an XSD. Does the Mintrud validator publish an XSD we can generate or fetch? If yes, D3 should consider adding a post-generation validation step.
+- **`Test.IsPassedAttr` hardcoding.** Legacy always emits `isPassed="true"` and assumes failed rows never reach the generator. In our DB-driven model, D3 must either filter at the SQL layer (`WHERE status = 'passed'`) or have the adapter skip non-passed rows.
+- **Locale defaults.** `goodsign/monday` defaults to Russian (`monday.LocaleRuRU`). If the template ever uses English placeholders, locale handling will need to be exposed.
+- **Moodle `SPEC_VALUE` collisions.** If we later integrate Moodle (§5), we must ensure only one code path writes the `idnumber = "mintrud"` marker — the legacy `CreateUser` and any new code D3 writes.
+- **Snils foreign-worker handling.** Legacy sets `IsForeignSnils = "true"` when SNILS is blank (xlsx.go:107-112). Our DB schema for foreign workers is TBD — does the audit model have a `snils` column with `NULL` for foreigners, or a separate `is_foreign` boolean?
