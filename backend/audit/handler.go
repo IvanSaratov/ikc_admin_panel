@@ -8,6 +8,12 @@ import (
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 )
 
+// HXRequestHeader is the header HTMX sends on every AJAX request. When
+// it is "true" the handler returns only the table fragment instead of
+// the full shell so HTMX's outerHTML swap can drop the result into the
+// #audit-table-wrap target without nesting a second shell layout.
+const HXRequestHeader = "HX-Request"
+
 // PageSize is the number of action_log rows rendered per page. The D4
 // plan fixes this at 50; tests assert pagination on the same constant
 // so the value lives in one place.
@@ -92,7 +98,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	// avoids any admin dependency from this handler.
 	login := ActorFromContext(ctx)
 
-	views.List(r, views.Page{
+	pageData := views.Page{
 		Rows:       rows,
 		Total:      total,
 		Page:       page,
@@ -102,7 +108,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		EntityType: entityType,
 		From:       createdFrom,
 		To:         createdTo,
-	}, login).Render(ctx, w)
+	}
+
+	// HTMX requests get only the inner fragment so the swap does not
+	// embed a second shell layout inside the page. The non-HTMX path
+	// renders the full page (filter form + table + shell).
+	if r.Header.Get(HXRequestHeader) == "true" {
+		views.TableFragment(r, pageData, login).Render(ctx, w)
+		return
+	}
+	views.List(r, pageData, login).Render(ctx, w)
 }
 
 // parsePage coerces the ?page= query param to a positive 1-based page

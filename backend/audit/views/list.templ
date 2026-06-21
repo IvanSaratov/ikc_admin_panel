@@ -112,17 +112,22 @@ templ List(r *http.Request, p Page, login string) {
 					</div>
 				</form>
 				<div id="audit-table-wrap">
-					@tableFragment(p)
+					@TableFragment(r, p, login)
 				</div>
 			</div>
 		</div>
 	}
 }
 
-// tableFragment renders only the table + pagination footer. Both the
-// initial page render and the HTMX swap target use this fragment so
-// applying a filter swaps just the table area, not the filter form.
-templ tableFragment(p Page) {
+// TableFragment renders only the table + pagination footer wrapped in
+// the #audit-table-wrap div. The handler returns this on HTMX requests
+// so the swap does not embed a second shell layout inside the page.
+//
+// It is exported (capitalised) because the handler needs to call it
+// when the HX-Request header is present. On the initial render the
+// List template embeds it inline via @TableFragment.
+templ TableFragment(r *http.Request, p Page, login string) {
+	<div id="audit-table-wrap">
 	<div class="table-responsive">
 		<table class="table table-vcenter card-table">
 			<thead>
@@ -186,6 +191,7 @@ templ tableFragment(p Page) {
 				>Next</a>
 			}
 		</div>
+	</div>
 	</div>
 }
 
