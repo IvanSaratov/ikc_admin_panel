@@ -54,7 +54,10 @@ func run() error {
 		return err
 	}
 
-	server := app.NewServer(addr, database)
+	server, err := app.NewServer(addr, database, nil)
+	if err != nil {
+		return err
+	}
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Printf("Mintrud Admin listening on http://localhost%s", addr)
