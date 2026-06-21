@@ -10,6 +10,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/employers"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/people"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/programs"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/requests"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
@@ -108,6 +109,8 @@ func NewRouter(deps Deps) http.Handler {
 		programHandler := programs.NewHandler(queries, auditSvc)
 		employerHandler := employers.NewHandler(queries, auditSvc)
 		peopleHandler := people.NewHandler(queries, auditSvc)
+		requestHandler := requests.NewHandler(queries, auditSvc, deps.Log)
+		requestHandler.Service().SetDB(deps.Database)
 
 		// Programs: groups.
 		r.Get("/programs", programHandler.List)
@@ -138,6 +141,14 @@ func NewRouter(deps Deps) http.Handler {
 		r.Post("/workers/{id}", peopleHandler.Edit)
 		r.Post("/workers/assignments", peopleHandler.AssignEmployer)
 		r.Post("/workers/assignments/{id}/deactivate", peopleHandler.DeactivateAssignment)
+
+		// Requests (XLSX upload + staging).
+		r.Get("/requests", requestHandler.List)
+		r.Get("/requests/new", requestHandler.NewRequestForm)
+		r.Post("/requests/new", requestHandler.Upload)
+		r.Get("/requests/{id}", requestHandler.Detail)
+		r.Post("/requests/{id}/rows/{rowID}/apply", requestHandler.ApplyRow)
+		r.Post("/requests/{id}/rows/{rowID}/skip", requestHandler.SkipRow)
 	})
 
 	// adminStore is referenced so the import is used; it's needed by
