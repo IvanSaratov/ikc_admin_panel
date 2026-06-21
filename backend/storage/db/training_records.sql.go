@@ -7,21 +7,115 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
+const createTrainingRecord = `-- name: CreateTrainingRecord :one
+INSERT INTO training_records (
+  worker_employer_id,
+  program_id,
+  client_request_id,
+  position,
+  hours,
+  requires_mintrud_test,
+  moodle_status,
+  status,
+  created_at,
+  updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, worker_employer_id, program_id, client_request_id, position, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
+`
+
+type CreateTrainingRecordParams struct {
+	WorkerEmployerID    int64         `json:"worker_employer_id"`
+	ProgramID           int64         `json:"program_id"`
+	ClientRequestID     sql.NullInt64 `json:"client_request_id"`
+	Position            string        `json:"position"`
+	Hours               int64         `json:"hours"`
+	RequiresMintrudTest int64         `json:"requires_mintrud_test"`
+	MoodleStatus        string        `json:"moodle_status"`
+	Status              string        `json:"status"`
+	CreatedAt           string        `json:"created_at"`
+	UpdatedAt           string        `json:"updated_at"`
+}
+
+func (q *Queries) CreateTrainingRecord(ctx context.Context, arg CreateTrainingRecordParams) (TrainingRecord, error) {
+	row := q.db.QueryRowContext(ctx, createTrainingRecord,
+		arg.WorkerEmployerID,
+		arg.ProgramID,
+		arg.ClientRequestID,
+		arg.Position,
+		arg.Hours,
+		arg.RequiresMintrudTest,
+		arg.MoodleStatus,
+		arg.Status,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i TrainingRecord
+	err := row.Scan(
+		&i.ID,
+		&i.WorkerEmployerID,
+		&i.ProgramID,
+		&i.ClientRequestID,
+		&i.Position,
+		&i.Hours,
+		&i.RequiresMintrudTest,
+		&i.MoodleStatus,
+		&i.MoodleError,
+		&i.MoodleEnrolledAt,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const findActiveTrainingRecord = `-- name: FindActiveTrainingRecord :one
+SELECT id, worker_employer_id, program_id, client_request_id, position, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
+FROM training_records
+WHERE worker_employer_id = ?
+  AND program_id = ?
+  AND status = 'active'
+LIMIT 1
+`
+
+type FindActiveTrainingRecordParams struct {
+	WorkerEmployerID int64 `json:"worker_employer_id"`
+	ProgramID        int64 `json:"program_id"`
+}
+
+// Used by ApplyRow to detect duplicates: same worker_employer + program +
+// status='active' is treated as "already enrolled", which forces the row
+// into the 'duplicate' state instead of creating a second training_record.
+func (q *Queries) FindActiveTrainingRecord(ctx context.Context, arg FindActiveTrainingRecordParams) (TrainingRecord, error) {
+	row := q.db.QueryRowContext(ctx, findActiveTrainingRecord, arg.WorkerEmployerID, arg.ProgramID)
+	var i TrainingRecord
+	err := row.Scan(
+		&i.ID,
+		&i.WorkerEmployerID,
+		&i.ProgramID,
+		&i.ClientRequestID,
+		&i.Position,
+		&i.Hours,
+		&i.RequiresMintrudTest,
+		&i.MoodleStatus,
+		&i.MoodleError,
+		&i.MoodleEnrolledAt,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getTrainingRecord = `-- name: GetTrainingRecord :one
-SELECT id, worker_employer_id, program_id, client_request_id, position, hours,
-       requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at,
-       status, created_at, updated_at
+SELECT id, worker_employer_id, program_id, client_request_id, position, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
 FROM training_records
 WHERE id = ?
 `
 
-// Returns a single training record by id, used by the protocols slice
-// to enrich the participant table with program/position info. Kept in
-// its own file (rather than people.sql) so the protocols slice can
-// reach into the storage layer without taking a dependency on the
-// people service.
 func (q *Queries) GetTrainingRecord(ctx context.Context, id int64) (TrainingRecord, error) {
 	row := q.db.QueryRowContext(ctx, getTrainingRecord, id)
 	var i TrainingRecord

@@ -79,6 +79,37 @@ func (q *Queries) DeactivateAssignment(ctx context.Context, arg DeactivateAssign
 	return i, err
 }
 
+const findActiveWorkerEmployer = `-- name: FindActiveWorkerEmployer :one
+SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
+FROM worker_employers
+WHERE worker_id = ?
+  AND employer_id = ?
+  AND status = 'active'
+LIMIT 1
+`
+
+type FindActiveWorkerEmployerParams struct {
+	WorkerID   int64 `json:"worker_id"`
+	EmployerID int64 `json:"employer_id"`
+}
+
+// Used by ApplyRow to locate the active assignment between a worker and the
+// request's employer; falls back to creating one if none exists.
+func (q *Queries) FindActiveWorkerEmployer(ctx context.Context, arg FindActiveWorkerEmployerParams) (WorkerEmployer, error) {
+	row := q.db.QueryRowContext(ctx, findActiveWorkerEmployer, arg.WorkerID, arg.EmployerID)
+	var i WorkerEmployer
+	err := row.Scan(
+		&i.ID,
+		&i.WorkerID,
+		&i.EmployerID,
+		&i.CurrentPosition,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorkerEmployer = `-- name: GetWorkerEmployer :one
 SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
 FROM worker_employers

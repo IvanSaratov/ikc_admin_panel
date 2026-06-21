@@ -1,0 +1,300 @@
+package views
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
+)
+
+// List renders the /requests index: filter chips + a table of
+// client_requests. statusFilter echoes the current ?status= value
+// so the template can render the right "active" badge.
+templ List(r *http.Request, items []db.ClientRequest, statusFilter string) {
+	@layouts.Shell("Requests", "requests", admin.UserLoginFromContext(r.Context()), r) {
+		<div class="card">
+			<div class="card-header d-flex justify-content-between align-items-center">
+				<h3 class="card-title">Requests</h3>
+				<a class="btn btn-primary" href="/requests/new">Upload XLSX</a>
+			</div>
+			<div class="card-body">
+				<form method="get" action="/requests" class="row g-2 align-items-end">
+					<div class="col-12 col-md-3">
+						<label class="form-label" for="status-filter">Status</label>
+						<select id="status-filter" name="status" class="form-select">
+							<option value="" selected?={ statusFilter == "" }>All</option>
+							<option value="review" selected?={ statusFilter == "review" }>review</option>
+							<option value="completed" selected?={ statusFilter == "completed" }>completed</option>
+							<option value="cancelled" selected?={ statusFilter == "cancelled" }>cancelled</option>
+						</select>
+					</div>
+					<div class="col-12 col-md-auto">
+						<button class="btn btn-secondary" type="submit">Filter</button>
+					</div>
+				</form>
+			</div>
+			<div class="table-responsive">
+				<table class="table table-vcenter card-table">
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Employer</th>
+							<th>Received</th>
+							<th>Status</th>
+							<th class="text-end">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, req := range items {
+							<tr>
+								<td>{ fmt.Sprint(req.ID) }</td>
+								<td>{ fmt.Sprint(req.EmployerID) }</td>
+								<td>{ req.ReceivedDate }</td>
+								<td>
+									<span class={ "badge " + statusBadgeClass(req.Status) }>{ req.Status }</span>
+								</td>
+								<td class="text-end">
+									<a class="btn btn-sm btn-link" href={ templ.SafeURL(fmt.Sprintf("/requests/%d", req.ID)) }>Open</a>
+								</td>
+							</tr>
+						}
+						if len(items) == 0 {
+							<tr>
+								<td colspan="5" class="text-secondary">No requests yet.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+// NewRequest renders /requests/new — the upload form. errors is an
+// optional per-field map; selectedEmployerID echoes back the
+// previously-entered value (string) so a validation error doesn't
+// wipe the operator's choice.
+templ NewRequest(r *http.Request, employers []db.Employer, errors map[string]string, selectedEmployerID string) {
+	@layouts.Shell("New request", "requests", admin.UserLoginFromContext(r.Context()), r) {
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Upload XLSX</h3>
+			</div>
+			<div class="card-body">
+				if errors != nil {
+					<div class="alert alert-danger">
+						for _, msg := range errors {
+							<div>{ msg }</div>
+						}
+					</div>
+				}
+				<form method="post" action="/requests/new" enctype="multipart/form-data" class="row g-3">
+					@components.CSRFField(r)
+					<div class="col-12 col-md-6">
+						<label class="form-label" for="employer-id">Employer</label>
+						<select id="employer-id" name="employer_id" class="form-select" required>
+							<option value="">Выберите работодателя</option>
+							for _, emp := range employers {
+								<option value={ fmt.Sprint(emp.ID) } selected?={ fmt.Sprint(emp.ID) == selectedEmployerID }>{ emp.CanonicalName } (ИНН { emp.Inn })</option>
+							}
+						</select>
+					</div>
+					<div class="col-12 col-md-3">
+						<label class="form-label" for="received-date">Received date</label>
+						<input id="received-date" class="form-control" type="date" name="received_date" required/>
+					</div>
+					<div class="col-12">
+						<label class="form-label" for="notes">Notes</label>
+						<textarea id="notes" name="notes" class="form-control" rows="2"></textarea>
+					</div>
+					<div class="col-12">
+						<label class="form-label" for="xlsx">XLSX file (max 10MB)</label>
+						<input id="xlsx" name="xlsx" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required/>
+					</div>
+					<div class="col-12 d-flex gap-2">
+						<button class="btn btn-primary" type="submit">Upload &amp; stage</button>
+						<a class="btn btn-link" href="/requests">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+// Detail renders /requests/{id} — the staged-rows table with apply /
+// skip buttons. itemsByRow maps request_row.id to its
+// request_training_items (with joined program info).
+templ Detail(r *http.Request, req db.ClientRequest, rows []db.RequestRow, itemsByRow map[int64][]db.ListRequestTrainingItemsForRowRow) {
+	@layouts.Shell("Request", "requests", admin.UserLoginFromContext(r.Context()), r) {
+		<div class="card mb-3">
+			<div class="card-header d-flex justify-content-between align-items-center">
+				<h3 class="card-title">Request #{ fmt.Sprint(req.ID) }</h3>
+				<span class={ "badge " + statusBadgeClass(req.Status) }>{ req.Status }</span>
+			</div>
+			<div class="card-body">
+				<dl class="row mb-0">
+					<dt class="col-sm-2">Employer</dt>
+					<dd class="col-sm-10">{ fmt.Sprint(req.EmployerID) }</dd>
+					<dt class="col-sm-2">Received</dt>
+					<dd class="col-sm-10">{ req.ReceivedDate }</dd>
+					if req.Notes.Valid && req.Notes.String != "" {
+						<dt class="col-sm-2">Notes</dt>
+						<dd class="col-sm-10">{ req.Notes.String }</dd>
+					}
+				</dl>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Rows ({ fmt.Sprint(len(rows)) })</h3>
+			</div>
+			<div class="table-responsive">
+				<table class="table table-vcenter card-table">
+					<thead>
+						<tr>
+							<th>#</th>
+							<th>Full name</th>
+							<th>SNILS</th>
+							<th>Email</th>
+							<th>Position</th>
+							<th>Programs</th>
+							<th>Status</th>
+							<th class="text-end">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range rows {
+							<tr>
+								<td>{ fmt.Sprint(row.RowNumber) }</td>
+								<td>{ displayName(row) }</td>
+								<td>{ displaySNILS(row) }</td>
+								<td>{ displayEmail(row) }</td>
+								<td>{ displayPosition(row) }</td>
+								<td>{ displayPrograms(itemsByRow[row.ID]) }</td>
+								<td>
+									<span class={ "badge " + statusBadgeClass(row.Status) }>{ row.Status }</span>
+									if row.ErrorSummary.Valid && row.ErrorSummary.String != "" {
+										<div class="text-danger small">{ row.ErrorSummary.String }</div>
+									}
+								</td>
+								<td class="text-end">
+									if canApply(row.Status) {
+										<form method="post" action={ templ.SafeURL(fmt.Sprintf("/requests/%d/rows/%d/apply", req.ID, row.ID)) } class="d-inline">
+											@components.CSRFField(r)
+											<button class="btn btn-sm btn-primary" type="submit">Apply</button>
+										</form>
+									}
+									if canSkip(row.Status) {
+										<form method="post" action={ templ.SafeURL(fmt.Sprintf("/requests/%d/rows/%d/skip", req.ID, row.ID)) } class="d-inline">
+											@components.CSRFField(r)
+											<button class="btn btn-sm btn-outline-secondary" type="submit">Skip</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+						if len(rows) == 0 {
+							<tr>
+								<td colspan="8" class="text-secondary">No rows staged yet.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+// ----- helpers rendered server-side -----
+
+func statusBadgeClass(status string) string {
+	switch status {
+	case "applied", "completed", "active":
+		return "bg-success"
+	case "skipped", "cancelled", "invalid":
+		return "bg-secondary"
+	case "duplicate":
+		return "bg-warning"
+	default:
+		return "bg-info"
+	}
+}
+
+func canApply(status string) bool {
+	return status == "pending" || status == "parsed" || status == "invalid" || status == "duplicate"
+}
+
+func canSkip(status string) bool {
+	return status == "pending" || status == "parsed" || status == "invalid" || status == "duplicate"
+}
+
+func displayName(row db.RequestRow) string {
+	last := row.ParsedLastName.String
+	first := row.ParsedFirstName.String
+	middle := ""
+	if row.ParsedMiddleName.Valid {
+		middle = row.ParsedMiddleName.String
+	}
+	switch {
+	case last != "" || first != "":
+		name := last
+		if first != "" {
+			if name != "" {
+				name += " "
+			}
+			name += first
+		}
+		if middle != "" {
+			name += " " + middle
+		}
+		return name
+	case row.RawFullName.Valid:
+		return row.RawFullName.String
+	default:
+		return ""
+	}
+}
+
+func displaySNILS(row db.RequestRow) string {
+	if row.ParsedSnils.Valid && row.ParsedSnils.String != "" {
+		return row.ParsedSnils.String
+	}
+	if row.RawFullName.Valid {
+		return ""
+	}
+	return ""
+}
+
+func displayEmail(row db.RequestRow) string {
+	if row.ParsedEmail.Valid {
+		return row.ParsedEmail.String
+	}
+	return ""
+}
+
+func displayPosition(row db.RequestRow) string {
+	if row.ParsedPosition.Valid {
+		return row.ParsedPosition.String
+	}
+	return ""
+}
+
+func displayPrograms(items []db.ListRequestTrainingItemsForRowRow) string {
+	if len(items) == 0 {
+		return ""
+	}
+	out := ""
+	for i, it := range items {
+		if i > 0 {
+			out += ", "
+		}
+		out += it.ProgramCode
+		if it.Status != "" && it.Status != "valid" && it.Status != "applied" {
+			out += " (" + it.Status + ")"
+		}
+	}
+	return out
+}

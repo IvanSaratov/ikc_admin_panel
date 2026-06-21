@@ -11,6 +11,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/people"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/programs"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/protocols"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/requests"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
@@ -111,6 +112,8 @@ func NewRouter(deps Deps) http.Handler {
 		peopleHandler := people.NewHandler(queries, auditSvc)
 		auditHandler := audit.NewHandler(queries)
 		protocolHandler := protocols.NewHandler(queries, deps.Database, auditSvc)
+		requestHandler := requests.NewHandler(queries, auditSvc, deps.Log)
+		requestHandler.Service().SetDB(deps.Database)
 
 		// Audit log viewer (D4). Read-only — does not write to
 		// action_log. Mutations go through audit.Service.Record from
@@ -160,6 +163,14 @@ func NewRouter(deps Deps) http.Handler {
 		r.Post("/protocols/{id}/participants", protocolHandler.AddParticipant)
 		r.Post("/protocols/{id}/participants/{pid}", protocolHandler.RemoveParticipant)
 		r.Post("/protocols/{id}/transition", protocolHandler.Transition)
+
+		// Requests (XLSX upload + staging).
+		r.Get("/requests", requestHandler.List)
+		r.Get("/requests/new", requestHandler.NewRequestForm)
+		r.Post("/requests/new", requestHandler.Upload)
+		r.Get("/requests/{id}", requestHandler.Detail)
+		r.Post("/requests/{id}/rows/{rowID}/apply", requestHandler.ApplyRow)
+		r.Post("/requests/{id}/rows/{rowID}/skip", requestHandler.SkipRow)
 	})
 
 	// adminStore is referenced so the import is used; it's needed by
