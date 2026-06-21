@@ -91,7 +91,9 @@ func NewRouter(deps Deps) http.Handler {
 		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 			http.Redirect(w, req, "/programs", http.StatusSeeOther)
 		})
-		r.Get("/logout", adminHandler.PostLogout)
+		// Logout is POST-only (with CSRF) so a third-party <img> tag or
+		// link prefetch cannot trigger it. See shell.templ for the form.
+		r.Post("/logout", adminHandler.PostLogout)
 
 		programHandler := programs.NewHandler(queries, auditSvc)
 		employerHandler := employers.NewHandler(queries, auditSvc)

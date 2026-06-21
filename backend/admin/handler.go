@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin/views"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
@@ -135,8 +137,13 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Successful authentication: commit session and audit.
-	_ = h.sessions.RenewToken(r.Context()) // mitigate session fixation
+	// Successful authentication: rotate the session ID before storing
+	// any user-derived data so a pre-login fixation cannot survive login.
+	if err := h.sessions.RenewToken(r.Context()); err != nil {
+		h.log.Error("renew session token", slog.String("err", err.Error()))
+		http.Error(w, "session error", http.StatusInternalServerError)
+		return
+	}
 	h.sessions.Put(r.Context(), SessionKeyUserID, user.ID)
 	h.sessions.Put(r.Context(), SessionKeyUserLogin, user.Login)
 
@@ -202,14 +209,21 @@ func errReason(err error) string {
 	}
 }
 
-// isSafeRedirect prevents open-redirects: only allow same-host relative
-// paths starting with "/" and not "//".
+// isSafeRedirect prevents open-redirects: only same-host relative paths
+// are allowed, and we reject anything that net/url parses as absolute,
+// contains a backslash, or carries percent-encoded slashes that decode
+// to a host-relative scheme like `//evil.com`.
 func isSafeRedirect(target string) bool {
-	if target == "" {
+	if target == "" || strings.ContainsAny(target, "\\") {
 		return false
 	}
-	if len(target) > 1 && target[0] == '/' && target[1] == '/' {
+	lower := strings.ToLower(target)
+	if strings.Contains(lower, "%2f") || strings.Contains(lower, "%5c") {
 		return false
 	}
-	return target[0] == '/'
+	u, err := url.Parse(target)
+	if err != nil || u.IsAbs() || u.Host != "" || u.Scheme != "" {
+		return false
+	}
+	return strings.HasPrefix(u.Path, "/")
 }

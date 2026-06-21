@@ -11,7 +11,7 @@ import (
 )
 
 templ List(r *http.Request, employers []db.Employer) {
-	@layouts.Shell("Employers", "employers", admin.UserLoginFromContext(r.Context())) {
+	@layouts.Shell("Employers", "employers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Employers</h3>
@@ -69,7 +69,7 @@ templ List(r *http.Request, employers []db.Employer) {
 }
 
 templ Edit(r *http.Request, employer db.Employer) {
-	@layouts.Shell("Edit employer", "employers", admin.UserLoginFromContext(r.Context())) {
+	@layouts.Shell("Edit employer", "employers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit employer</h3>
@@ -96,7 +96,7 @@ templ Edit(r *http.Request, employer db.Employer) {
 }
 
 templ Detail(r *http.Request, employer db.Employer, assignments []db.WorkerEmployer) {
-	@layouts.Shell("Employer", "employers", admin.UserLoginFromContext(r.Context())) {
+	@layouts.Shell("Employer", "employers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card mb-3">
 			<div class="card-header">
 				<h3 class="card-title">{ employer.CanonicalName }</h3>

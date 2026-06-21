@@ -11,7 +11,7 @@ import (
 )
 
 templ List(r *http.Request, workers []db.Worker, employers []db.Employer, assignments []db.ListWorkerEmployerAssignmentsRow) {
-	@layouts.Shell("Workers", "workers", admin.UserLoginFromContext(r.Context())) {
+	@layouts.Shell("Workers", "workers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="row row-cards">
 			<div class="col-12">
 				<div class="card">
@@ -146,7 +146,7 @@ templ List(r *http.Request, workers []db.Worker, employers []db.Employer, assign
 }
 
 templ Edit(r *http.Request, worker db.Worker) {
-	@layouts.Shell("Edit worker", "workers", admin.UserLoginFromContext(r.Context())) {
+	@layouts.Shell("Edit worker", "workers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit worker</h3>
@@ -185,7 +185,7 @@ templ Edit(r *http.Request, worker db.Worker) {
 }
 
 templ Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, employers []db.Employer) {
-	@layouts.Shell("Worker", "workers", admin.UserLoginFromContext(r.Context())) {
+	@layouts.Shell("Worker", "workers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card mb-3">
 			<div class="card-header">
 				<h3 class="card-title">{ worker.LastName } { worker.FirstName } { worker.MiddleName.String }</h3>

@@ -343,7 +343,7 @@ func List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) temp
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Programs", "programs", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Programs", "programs", admin.UserLoginFromContext(r.Context()), r).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -437,7 +437,7 @@ func EditGroup(r *http.Request, group db.ProgramGroup) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Edit program group", "programs", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Edit program group", "programs", admin.UserLoginFromContext(r.Context()), r).Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -639,7 +639,7 @@ func EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) 
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Edit program", "programs", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var23), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Edit program", "programs", admin.UserLoginFromContext(r.Context()), r).Render(templ.WithChildren(ctx, templ_7745c5c3_Var23), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

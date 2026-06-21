@@ -154,7 +154,7 @@ func List(r *http.Request, employers []db.Employer) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Employers", "employers", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Employers", "employers", admin.UserLoginFromContext(r.Context()), r).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -248,7 +248,7 @@ func Edit(r *http.Request, employer db.Employer) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Edit employer", "employers", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var9), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Edit employer", "employers", admin.UserLoginFromContext(r.Context()), r).Render(templ.WithChildren(ctx, templ_7745c5c3_Var9), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -423,7 +423,7 @@ func Detail(r *http.Request, employer db.Employer, assignments []db.WorkerEmploy
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = layouts.Shell("Employer", "employers", admin.UserLoginFromContext(r.Context())).Render(templ.WithChildren(ctx, templ_7745c5c3_Var14), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Shell("Employer", "employers", admin.UserLoginFromContext(r.Context()), r).Render(templ.WithChildren(ctx, templ_7745c5c3_Var14), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

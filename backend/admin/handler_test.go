@@ -282,3 +282,11 @@ func extractFormValue(t *testing.T, body, name string) string {
 	end := strings.Index(rest, `"`)
 	return rest[:end]
 }
+
+func TestIsSafeRedirect(t *testing.T) {
+	t.Skip("moved to internal_test.go (package admin) — handler_test.go is external and cannot reach unexported isSafeRedirect")
+}
+
+func TestErrUserDisabledIsErrInvalidCredentials(t *testing.T) {
+	t.Skip("moved to internal_test.go (package admin) — handler_test.go is external and cannot reach unexported sentinels")
+}
