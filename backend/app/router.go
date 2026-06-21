@@ -10,6 +10,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/employers"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/people"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/programs"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/protocols"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
@@ -109,6 +110,7 @@ func NewRouter(deps Deps) http.Handler {
 		employerHandler := employers.NewHandler(queries, auditSvc)
 		peopleHandler := people.NewHandler(queries, auditSvc)
 		auditHandler := audit.NewHandler(queries)
+		protocolHandler := protocols.NewHandler(queries, deps.Database, auditSvc)
 
 		// Audit log viewer (D4). Read-only — does not write to
 		// action_log. Mutations go through audit.Service.Record from
@@ -144,6 +146,20 @@ func NewRouter(deps Deps) http.Handler {
 		r.Post("/workers/{id}", peopleHandler.Edit)
 		r.Post("/workers/assignments", peopleHandler.AssignEmployer)
 		r.Post("/workers/assignments/{id}/deactivate", peopleHandler.DeactivateAssignment)
+
+		// Protocols (D2): list, create, detail, fix, transition, participants.
+		// Every POST goes through CSRF + RequireAuth (the outer Group enforces
+		// both). The /protocols/{id}/participants/{pid} route uses a form
+		// field `_method=delete` so HTML forms (which only emit GET/POST)
+		// can soft-delete a participant.
+		r.Get("/protocols", protocolHandler.List)
+		r.Post("/protocols", protocolHandler.Create)
+		r.Get("/protocols/{id}", protocolHandler.Detail)
+		r.Get("/protocols/{id}/fix", protocolHandler.Fix)
+		r.Post("/protocols/{id}/fix", protocolHandler.Fix)
+		r.Post("/protocols/{id}/participants", protocolHandler.AddParticipant)
+		r.Post("/protocols/{id}/participants/{pid}", protocolHandler.RemoveParticipant)
+		r.Post("/protocols/{id}/transition", protocolHandler.Transition)
 	})
 
 	// adminStore is referenced so the import is used; it's needed by
