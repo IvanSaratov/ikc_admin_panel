@@ -75,9 +75,9 @@ func (h *Handler) Generate(w http.ResponseWriter, r *http.Request) {
 	)
 	switch docType {
 	case "xml":
-		raw, run, gen = GenerateXML(ctx, h.queries, protocolID)
+		raw, run, gen = h.svc.generateXMLWith(ctx, h.queries, protocolID)
 	case "docx":
-		raw, run, gen = GenerateDOCX(ctx, h.queries, protocolID)
+		raw, run, gen = h.svc.generateDOCXWith(ctx, h.queries, protocolID)
 	}
 
 	if gen != nil {
@@ -160,14 +160,14 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	// protocols with <100 participants.
 	switch row.Type {
 	case "xml":
-		raw, _, regenErr := GenerateXML(ctx, h.queries, protocolID)
+		raw, _, regenErr := h.svc.generateXMLWith(ctx, h.queries, protocolID)
 		if regenErr != nil {
 			http.Error(w, "regenerate xml: "+regenErr.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeAttachment(w, "xml", raw, row.FileName.String)
 	case "docx":
-		raw, _, regenErr := GenerateDOCX(ctx, h.queries, protocolID)
+		raw, _, regenErr := h.svc.generateDOCXWith(ctx, h.queries, protocolID)
 		if regenErr != nil {
 			http.Error(w, "regenerate docx: "+regenErr.Error(), http.StatusInternalServerError)
 			return
