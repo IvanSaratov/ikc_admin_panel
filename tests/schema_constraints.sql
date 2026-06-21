@@ -300,3 +300,43 @@ VALUES (
   '{"ip":"127.0.0.1"}',
   '2026-05-27T00:00:00Z'
 );
+
+-- 004 additions: users table constraints.
+
+-- name: test_users_role_rejects_invalid
+-- role must be 'operator' or 'admin'.
+INSERT INTO users (
+  login, password_hash, role, status, created_at, updated_at
+)
+VALUES (
+  'badrole', 'hash', 'superuser', 'active',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_users_status_rejects_invalid
+-- status must be 'active' or 'disabled'.
+INSERT INTO users (
+  login, password_hash, role, status, created_at, updated_at
+)
+VALUES (
+  'badstatus', 'hash', 'admin', 'archived',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_users_login_must_be_unique
+-- ux_users_login must reject a second row with the same login.
+INSERT INTO users (
+  login, password_hash, role, status, created_at, updated_at
+)
+VALUES (
+  'admin', 'hash', 'admin', 'active',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+INSERT INTO users (
+  login, password_hash, role, status, created_at, updated_at
+)
+VALUES (
+  'admin', 'hash2', 'admin', 'active',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);

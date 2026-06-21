@@ -1,6 +1,12 @@
 package layouts
 
-templ Shell(title string, active string) {
+import (
+	"net/http"
+
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
+)
+
+templ Shell(title string, active string, login string, r *http.Request) {
 	<!DOCTYPE html>
 	<html lang="ru">
 		<head>
@@ -23,8 +29,17 @@ templ Shell(title string, active string) {
 				</aside>
 				<div class="page-wrapper">
 					<div class="page-header d-print-none">
-						<div class="container-xl">
+						<div class="container-xl d-flex justify-content-between align-items-center">
 							<h2 class="page-title">{ title }</h2>
+							if login != "" {
+								<div class="d-flex align-items-center gap-2">
+									<span class="text-secondary">Signed in as <strong>{ login }</strong></span>
+									<form method="post" action="/logout" class="d-inline">
+										@components.CSRFField(r)
+										<button class="btn btn-sm btn-outline-secondary" type="submit">Logout</button>
+									</form>
+								</div>
+							}
 						</div>
 					</div>
 					<div class="page-body">
@@ -39,3 +54,7 @@ templ Shell(title string, active string) {
 		</body>
 	</html>
 }
+
+// navActive is defined in helpers.go so the templ-generated shell
+// code can call into it without redefining it here (Go would reject
+// the duplicate declaration).

@@ -96,5 +96,8 @@ run_expected_failure "test_employer_status_rejects_invalid"
 run_expected_success "test_worker_status_defaults_to_active"
 run_expected_failure "test_worker_status_rejects_invalid"
 run_expected_success "test_action_log_actor_accepts_operator_login"
+run_expected_failure "test_users_role_rejects_invalid"
+run_expected_failure "test_users_status_rejects_invalid"
+run_expected_failure "test_users_login_must_be_unique"
 
 

@@ -180,6 +180,21 @@ type TrainingRecord struct {
 	UpdatedAt           string         `json:"updated_at"`
 }
 
+// User mirrors the `users` table. PasswordHash has json:"-" so that an
+// accidental json.Marshal of this struct (e.g. via a handler logging
+// the user, an audit Details map, or a future API endpoint) cannot
+// leak the bcrypt hash. This patch is reapplied after every `make sqlc`
+// since sqlc regenerates models.go from scratch.
+type User struct {
+	ID           int64  `json:"id"`
+	Login        string `json:"login"`
+	PasswordHash string `json:"-"`
+	Role         string `json:"role"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
 type Worker struct {
 	ID              int64          `json:"id"`
 	LastName        string         `json:"last_name"`

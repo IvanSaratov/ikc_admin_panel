@@ -2,13 +2,16 @@ package views
 
 import (
 	"fmt"
+	"net/http"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
 )
 
-templ List(groups []db.ProgramGroup, programs []db.Program) {
-	@layouts.Shell("Programs", "programs") {
+templ List(r *http.Request, groups []db.ProgramGroup, programs []db.Program) {
+	@layouts.Shell("Programs", "programs", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="row row-cards">
 			<div class="col-12">
 				<div class="card">
@@ -17,7 +20,7 @@ templ List(groups []db.ProgramGroup, programs []db.Program) {
 					</div>
 					<div class="card-body">
 						<form method="post" action="/programs/groups" class="row g-2 align-items-end">
-							// TODO(f3): add csrfField
+							@components.CSRFField(r)
 							<div class="col-12 col-md-2">
 								<label class="form-label" for="group-code">Code</label>
 								<input id="group-code" class="form-control" name="code"/>
@@ -51,7 +54,7 @@ templ List(groups []db.ProgramGroup, programs []db.Program) {
 											if group.Status == "active" {
 												<a class="btn btn-sm btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/programs/groups/%d/edit", group.ID)) }>Edit</a>
 												<form method="post" action={ templ.SafeURL(fmt.Sprintf("/programs/groups/%d/deactivate", group.ID)) } class="d-inline">
-													// TODO(f3): add csrfField
+													@components.CSRFField(r)
 													<button class="btn btn-sm btn-warning" type="submit">Deactivate</button>
 												</form>
 											} else {
@@ -77,7 +80,7 @@ templ List(groups []db.ProgramGroup, programs []db.Program) {
 					</div>
 					<div class="card-body">
 						<form method="post" action="/programs" class="row g-2 align-items-end">
-							// TODO(f3): add csrfField
+							@components.CSRFField(r)
 							<div class="col-12 col-md-3">
 								<label class="form-label" for="program-group">Group</label>
 								<select id="program-group" class="form-select" name="program_group_id">
@@ -125,7 +128,7 @@ templ List(groups []db.ProgramGroup, programs []db.Program) {
 											if program.Status == "active" {
 												<a class="btn btn-sm btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/programs/%d/edit", program.ID)) }>Edit</a>
 												<form method="post" action={ templ.SafeURL(fmt.Sprintf("/programs/%d/deactivate", program.ID)) } class="d-inline">
-													// TODO(f3): add csrfField
+													@components.CSRFField(r)
 													<button class="btn btn-sm btn-warning" type="submit">Deactivate</button>
 												</form>
 											} else {
@@ -148,15 +151,15 @@ templ List(groups []db.ProgramGroup, programs []db.Program) {
 	}
 }
 
-templ EditGroup(group db.ProgramGroup) {
-	@layouts.Shell("Edit program group", "programs") {
+templ EditGroup(r *http.Request, group db.ProgramGroup) {
+	@layouts.Shell("Edit program group", "programs", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit program group</h3>
 			</div>
 			<div class="card-body">
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/programs/groups/%d/edit", group.ID)) } class="row g-2 align-items-end">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<div class="col-12 col-md-2">
 						<label class="form-label" for="group-code">Code</label>
 						<input id="group-code" class="form-control" name="code" value={ group.Code }/>
@@ -175,15 +178,15 @@ templ EditGroup(group db.ProgramGroup) {
 	}
 }
 
-templ EditProgram(program db.Program, groups []db.ProgramGroup) {
-	@layouts.Shell("Edit program", "programs") {
+templ EditProgram(r *http.Request, program db.Program, groups []db.ProgramGroup) {
+	@layouts.Shell("Edit program", "programs", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit program</h3>
 			</div>
 			<div class="card-body">
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/programs/%d/edit", program.ID)) } class="row g-2 align-items-end">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<div class="col-12 col-md-3">
 						<label class="form-label" for="program-group">Group</label>
 						<select id="program-group" class="form-select" name="program_group_id">

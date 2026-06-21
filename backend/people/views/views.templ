@@ -2,13 +2,16 @@ package views
 
 import (
 	"fmt"
+	"net/http"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/components"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
 )
 
-templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWorkerEmployerAssignmentsRow) {
-	@layouts.Shell("Workers", "workers") {
+templ List(r *http.Request, workers []db.Worker, employers []db.Employer, assignments []db.ListWorkerEmployerAssignmentsRow) {
+	@layouts.Shell("Workers", "workers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="row row-cards">
 			<div class="col-12">
 				<div class="card">
@@ -17,7 +20,7 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 					</div>
 					<div class="card-body">
 						<form method="post" action="/workers" class="row g-2 align-items-end">
-							// TODO(f3): add csrfField
+							@components.CSRFField(r)
 							<div class="col-12 col-md-2">
 								<label class="form-label" for="worker-last-name">Last name</label>
 								<input id="worker-last-name" class="form-control" name="last_name"/>
@@ -83,7 +86,7 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 					</div>
 					<div class="card-body">
 						<form method="post" action="/workers/assignments" class="row g-2 align-items-end">
-							// TODO(f3): add csrfField
+							@components.CSRFField(r)
 							<div class="col-12 col-md-4">
 								<label class="form-label" for="assignment-worker">Worker</label>
 								<select id="assignment-worker" class="form-select" name="worker_id">
@@ -142,15 +145,15 @@ templ List(workers []db.Worker, employers []db.Employer, assignments []db.ListWo
 	}
 }
 
-templ Edit(worker db.Worker) {
-	@layouts.Shell("Edit worker", "workers") {
+templ Edit(r *http.Request, worker db.Worker) {
+	@layouts.Shell("Edit worker", "workers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card">
 			<div class="card-header">
 				<h3 class="card-title">Edit worker</h3>
 			</div>
 			<div class="card-body">
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/workers/%d", worker.ID)) } class="row g-2 align-items-end">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<div class="col-12 col-md-2">
 						<label class="form-label" for="worker-last-name">Last name</label>
 						<input id="worker-last-name" class="form-control" name="last_name" value={ worker.LastName }/>
@@ -181,8 +184,8 @@ templ Edit(worker db.Worker) {
 	}
 }
 
-templ Detail(worker db.Worker, assignments []db.WorkerEmployer, employers []db.Employer) {
-	@layouts.Shell("Worker", "workers") {
+templ Detail(r *http.Request, worker db.Worker, assignments []db.WorkerEmployer, employers []db.Employer) {
+	@layouts.Shell("Worker", "workers", admin.UserLoginFromContext(r.Context()), r) {
 		<div class="card mb-3">
 			<div class="card-header">
 				<h3 class="card-title">{ worker.LastName } { worker.FirstName } { worker.MiddleName.String }</h3>
@@ -219,7 +222,7 @@ templ Detail(worker db.Worker, assignments []db.WorkerEmployer, employers []db.E
 					</thead>
 					<tbody>
 						for _, a := range assignments {
-							@assignmentRow(a, employers)
+							@assignmentRow(r, a, employers)
 						}
 						if len(assignments) == 0 {
 							<tr>
@@ -233,7 +236,7 @@ templ Detail(worker db.Worker, assignments []db.WorkerEmployer, employers []db.E
 	}
 }
 
-templ assignmentRow(a db.WorkerEmployer, employers []db.Employer) {
+templ assignmentRow(r *http.Request, a db.WorkerEmployer, employers []db.Employer) {
 	<tr>
 		<td>
 			for _, e := range employers {
@@ -247,7 +250,7 @@ templ assignmentRow(a db.WorkerEmployer, employers []db.Employer) {
 		<td class="text-end">
 			if a.Status == "active" {
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/workers/assignments/%d/deactivate", a.ID)) } class="d-inline">
-					// TODO(f3): add csrfField
+					@components.CSRFField(r)
 					<button class="btn btn-sm btn-warning" type="submit">Deactivate</button>
 				</form>
 			} else {

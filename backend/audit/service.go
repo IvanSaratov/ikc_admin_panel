@@ -18,6 +18,40 @@ import (
 // Default actor used when callers leave RecordInput.Actor empty.
 const DefaultActor = "operator_unidentified"
 
+// ctxKeyActor is the request-context key under which a real (post-auth)
+// actor login is published. admin.RequireAuth populates it via
+// WithActor; Record reads it when RecordInput.Actor is empty.
+//
+// The key is unexported so callers cannot collide on it directly; the
+// only supported way to publish an actor is WithActor.
+type ctxKey int
+
+const ctxKeyActor ctxKey = iota
+
+// WithActor returns a derived context tagged with the given actor login.
+//
+// Use this to mark a request context as "made by <login>" so that any
+// audit.Record call made with that context will pick up the login even
+// when RecordInput.Actor is left empty. Passing an empty actor is a
+// no-op (the returned context equals the input).
+func WithActor(ctx context.Context, actor string) context.Context {
+	if actor == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxKeyActor, actor)
+}
+
+// ActorFromContext returns the actor login published via WithActor, or
+// "" if none has been set. Exposed so admin.RequireAuth (and tests) can
+// inspect what audit will attribute a row to without going through
+// Record.
+func ActorFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(ctxKeyActor).(string); ok {
+		return v
+	}
+	return ""
+}
+
 // Service writes audit entries through sqlc-generated queries.
 //
 // It is safe for concurrent use as long as the underlying *sql.DB is.
@@ -49,14 +83,23 @@ func NewService(q *storagedb.Queries) *Service {
 
 // Record inserts a single action_log entry.
 //
-// On an empty Actor the entry is stored with DefaultActor
-// ("operator_unidentified") so the column's NOT NULL/CHECK constraint is
-// satisfied even before F3 wires in real login sessions.
+// Actor resolution order (first non-empty wins):
+//  1. RecordInput.Actor, when set explicitly by the caller.
+//  2. The actor published on the request context via WithActor.
+//  3. DefaultActor ("operator_unidentified").
+//
+// Resolving from the context lets the admin middleware "wire in" a real
+// login to every subsequent audit row without requiring every handler
+// to plumb an actor argument through its call chain. The function
+// signature is unchanged from F1; the new behaviour is additive.
 //
 // Returns any underlying storage error verbatim so callers can decide
 // whether audit failures should bubble up to the user.
 func (s *Service) Record(ctx context.Context, in RecordInput) error {
 	actor := in.Actor
+	if actor == "" {
+		actor = ActorFromContext(ctx)
+	}
 	if actor == "" {
 		actor = DefaultActor
 	}
