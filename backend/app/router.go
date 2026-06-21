@@ -108,6 +108,12 @@ func NewRouter(deps Deps) http.Handler {
 		programHandler := programs.NewHandler(queries, auditSvc)
 		employerHandler := employers.NewHandler(queries, auditSvc)
 		peopleHandler := people.NewHandler(queries, auditSvc)
+		auditHandler := audit.NewHandler(queries)
+
+		// Audit log viewer (D4). Read-only — does not write to
+		// action_log. Mutations go through audit.Service.Record from
+		// every other handler in this group.
+		r.Get("/audit", auditHandler.List)
 
 		// Programs: groups.
 		r.Get("/programs", programHandler.List)

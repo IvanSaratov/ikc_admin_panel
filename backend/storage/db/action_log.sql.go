@@ -10,6 +10,40 @@ import (
 	"database/sql"
 )
 
+const countActionLogsFiltered = `-- name: CountActionLogsFiltered :one
+SELECT COUNT(*) AS total
+FROM action_log
+WHERE (length(?1) = 0 OR actor = ?1)
+  AND (length(?2) = 0 OR action = ?2)
+  AND (length(?3) = 0 OR entity_type = ?3)
+  AND (length(?4) = 0 OR created_at >= ?4)
+  AND (length(?5) = 0 OR created_at <= ?5)
+`
+
+type CountActionLogsFilteredParams struct {
+	Actor       interface{} `json:"actor"`
+	Action      interface{} `json:"action"`
+	EntityType  interface{} `json:"entity_type"`
+	CreatedFrom interface{} `json:"created_from"`
+	CreatedTo   interface{} `json:"created_to"`
+}
+
+// D4 audit UI: count rows that match the same filter set as
+// ListActionLogsFiltered. One round-trip so the UI can render "Page N
+// of M" without pulling the full result set. Same filter idiom.
+func (q *Queries) CountActionLogsFiltered(ctx context.Context, arg CountActionLogsFilteredParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActionLogsFiltered,
+		arg.Actor,
+		arg.Action,
+		arg.EntityType,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+	)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
 const createActionLog = `-- name: CreateActionLog :one
 INSERT INTO action_log (
   actor,
@@ -70,6 +104,73 @@ type ListActionLogsByEntityParams struct {
 // insertion (id ASC). Used by service tests to verify audit trails.
 func (q *Queries) ListActionLogsByEntity(ctx context.Context, arg ListActionLogsByEntityParams) ([]ActionLog, error) {
 	rows, err := q.db.QueryContext(ctx, listActionLogsByEntity, arg.EntityType, arg.EntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ActionLog
+	for rows.Next() {
+		var i ActionLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Actor,
+			&i.Action,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Details,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActionLogsFiltered = `-- name: ListActionLogsFiltered :many
+SELECT id, actor, action, entity_type, entity_id, details, created_at
+FROM action_log
+WHERE (length(?1) = 0 OR actor = ?1)
+  AND (length(?2) = 0 OR action = ?2)
+  AND (length(?3) = 0 OR entity_type = ?3)
+  AND (length(?4) = 0 OR created_at >= ?4)
+  AND (length(?5) = 0 OR created_at <= ?5)
+ORDER BY created_at DESC, id DESC
+LIMIT ?7 OFFSET ?6
+`
+
+type ListActionLogsFilteredParams struct {
+	Actor       interface{} `json:"actor"`
+	Action      interface{} `json:"action"`
+	EntityType  interface{} `json:"entity_type"`
+	CreatedFrom interface{} `json:"created_from"`
+	CreatedTo   interface{} `json:"created_to"`
+	Off         int64       `json:"off"`
+	Lim         int64       `json:"lim"`
+}
+
+// D4 audit UI: list action_log rows matching the optional filters in
+// actor/action/entity_type + a created_at range. Each filter parameter
+// is a plain string; an empty string disables that filter. We use
+// `length(filter) = 0 OR col <op> filter` to short-circuit when the
+// filter is empty so the WHERE clause drops out without a NULL path.
+// Ordering is newest-first; ties broken by id DESC for stable pagination.
+func (q *Queries) ListActionLogsFiltered(ctx context.Context, arg ListActionLogsFilteredParams) ([]ActionLog, error) {
+	rows, err := q.db.QueryContext(ctx, listActionLogsFiltered,
+		arg.Actor,
+		arg.Action,
+		arg.EntityType,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+		arg.Off,
+		arg.Lim,
+	)
 	if err != nil {
 		return nil, err
 	}

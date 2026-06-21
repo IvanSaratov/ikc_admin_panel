@@ -1,0 +1,245 @@
+package views
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+
+	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
+)
+
+// Page bundles the data needed to render one page of the audit log:
+// the rows returned for the current filter set, the total matching
+// count (for pagination UI), the current 1-based page number, and the
+// raw filter values so the form can re-populate itself on submit.
+//
+// Keeping this in views (not in the handler package) lets future
+// audit-list UIs (CSV export, JSON API) reuse the same shape without
+// duplicating the field list.
+type Page struct {
+	Rows       []db.ActionLog
+	Total      int64
+	Page       int64
+	PageSize   int64
+	Actor      string
+	Action     string
+	EntityType string
+	From       string
+	To         string
+}
+
+// LastPage returns the highest valid 1-based page number. When there
+// are no rows at all, LastPage is 1 so the pagination links do not
+// disappear on an empty result set.
+func (p Page) LastPage() int64 {
+	if p.Total <= 0 {
+		return 1
+	}
+	last := p.Total / p.PageSize
+	if p.Total%p.PageSize != 0 {
+		last++
+	}
+	return last
+}
+
+// HasPrev / HasNext / PrevPage / NextPage drive the "Prev / Next"
+// links. We deliberately do not render page numbers (e.g. 1 2 3 …) —
+// the D4 plan only asks for next/prev and a current-page label.
+func (p Page) HasPrev() bool { return p.Page > 1 }
+func (p Page) HasNext() bool { return p.Page < p.LastPage() }
+func (p Page) PrevPage() int64 {
+	if !p.HasPrev() {
+		return 1
+	}
+	return p.Page - 1
+}
+func (p Page) NextPage() int64 {
+	if !p.HasNext() {
+		return p.LastPage()
+	}
+	return p.Page + 1
+}
+
+// List renders the audit log page. The filter form uses hx-get so
+// applying filters or paginating does not reload the whole page; only
+// the card body (the table + pagination links) is swapped.
+//
+// login is passed in as a plain string so this package does not need
+// to import backend/admin (which would create an import cycle:
+// admin/handler.go imports audit). The handler resolves the login
+// from the request context before calling List.
+templ List(r *http.Request, p Page, login string) {
+	@layouts.Shell("Audit log", "audit", login, r) {
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Audit log</h3>
+			</div>
+			<div class="card-body">
+				<form
+					method="get"
+					action="/audit"
+					class="row g-2 align-items-end mb-3"
+					hx-get="/audit"
+					hx-target="#audit-table-wrap"
+					hx-trigger="change, submit"
+					hx-push-url="true"
+				>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="audit-actor">Actor</label>
+						<input id="audit-actor" class="form-control" name="actor" value={ p.Actor } placeholder="operator..."/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="audit-action">Action</label>
+						<input id="audit-action" class="form-control" name="action" value={ p.Action } placeholder="create, update..."/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="audit-entity-type">Entity type</label>
+						<input id="audit-entity-type" class="form-control" name="entity_type" value={ p.EntityType } placeholder="employer, program..."/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="audit-from">From</label>
+						<input id="audit-from" class="form-control" name="created_from" type="date" value={ p.From }/>
+					</div>
+					<div class="col-12 col-md-2">
+						<label class="form-label" for="audit-to">To</label>
+						<input id="audit-to" class="form-control" name="created_to" type="date" value={ p.To }/>
+					</div>
+					<div class="col-12 col-md-2 d-flex gap-2">
+						<button class="btn btn-primary" type="submit">Apply</button>
+						<a class="btn btn-link" href="/audit">Reset</a>
+					</div>
+				</form>
+				<div id="audit-table-wrap">
+					@TableFragment(r, p, login)
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// TableFragment renders only the table + pagination footer. The
+// handler returns this on HTMX requests so the swap does not embed a
+// second shell layout inside the page. The caller (handler for HTMX
+// path, List template for the full page) is responsible for wrapping
+// the result in `<div id="audit-table-wrap">`.
+//
+// It is exported (capitalised) because the handler needs to call it
+// when the HX-Request header is present. On the initial render the
+// List template embeds it inline via @TableFragment.
+templ TableFragment(r *http.Request, p Page, login string) {
+	<div class="table-responsive">
+		<table class="table table-vcenter card-table">
+			<thead>
+				<tr>
+					<th>When</th>
+					<th>Actor</th>
+					<th>Action</th>
+					<th>Entity</th>
+					<th>Details</th>
+				</tr>
+			</thead>
+			<tbody>
+				if len(p.Rows) == 0 {
+					<tr>
+						<td colspan="5" class="text-secondary">No audit entries match the current filters.</td>
+					</tr>
+				}
+				for _, row := range p.Rows {
+					<tr>
+						<td>{ row.CreatedAt }</td>
+						<td>{ row.Actor }</td>
+						<td>{ row.Action }</td>
+						if row.EntityID.Valid {
+							<td>{ row.EntityType } #{ fmt.Sprint(row.EntityID.Int64) }</td>
+						} else {
+							<td><span class="text-secondary">{ row.EntityType }</span></td>
+						}
+						<td>
+							if row.Details.Valid {
+								@templ.Raw(formatDetails(row.Details.String))
+							} else {
+								<span class="text-secondary">—</span>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+	<div class="d-flex justify-content-between align-items-center mt-3">
+		<div class="text-secondary">
+			Page { fmt.Sprint(p.Page) } of { fmt.Sprint(p.LastPage()) } ({ fmt.Sprint(p.Total) } entries)
+		</div>
+		<div class="d-flex gap-2">
+			if p.HasPrev() {
+				<a
+					class="btn btn-sm btn-outline-secondary"
+					hx-get={ templ.SafeURL(pageURL(p, p.PrevPage())) }
+					hx-target="#audit-table-wrap"
+					hx-swap="outerHTML"
+					href={ templ.SafeURL(pageURL(p, p.PrevPage())) }
+				>Previous</a>
+			}
+			if p.HasNext() {
+				<a
+					class="btn btn-sm btn-outline-secondary"
+					hx-get={ templ.SafeURL(pageURL(p, p.NextPage())) }
+					hx-target="#audit-table-wrap"
+					hx-swap="outerHTML"
+					href={ templ.SafeURL(pageURL(p, p.NextPage())) }
+				>Next</a>
+			}
+		</div>
+	</div>
+}
+
+// formatDetails pretty-prints a JSON-encoded details blob so operators
+// can read it at a glance. The work is lifted out of the templ file
+// because templ cannot unmarshal + re-marshal a string inline. If the
+// value is not valid JSON the raw value is shown verbatim rather than
+// crashing the page.
+//
+// We html-escape nothing because json.MarshalIndent produces a JSON
+// string that contains no metacharacters that need escaping inside
+// <pre>; the only HTML-meaningful characters in raw JSON would be the
+// angle brackets in a key like "from:<", which we do not expect in
+// practice (and which the audit service writes are server-controlled).
+// The "<pre>" wrapper itself is emitted as a templ literal so it is
+// never derived from user input.
+func formatDetails(raw string) string {
+	var anyVal any
+	if err := json.Unmarshal([]byte(raw), &anyVal); err == nil {
+		pretty, err := json.MarshalIndent(anyVal, "", "  ")
+		if err == nil {
+			return "<pre class=\"mb-0 small\">" + string(pretty) + "</pre>"
+		}
+	}
+	return "<pre class=\"mb-0 small\">" + raw + "</pre>"
+}
+
+// pageURL rebuilds the filter URL with ?page=N. We rebuild (rather
+// than mutate the current URL) so empty filters do not produce
+// stale query params. Built via net/url.Values so values are
+// percent-encoded by the stdlib.
+func pageURL(p Page, page int64) string {
+	v := url.Values{}
+	if p.Actor != "" {
+		v.Set("actor", p.Actor)
+	}
+	if p.Action != "" {
+		v.Set("action", p.Action)
+	}
+	if p.EntityType != "" {
+		v.Set("entity_type", p.EntityType)
+	}
+	if p.From != "" {
+		v.Set("created_from", p.From)
+	}
+	if p.To != "" {
+		v.Set("created_to", p.To)
+	}
+	v.Set("page", fmt.Sprintf("%d", page))
+	return "?" + v.Encode()
+}
