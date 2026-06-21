@@ -1,6 +1,8 @@
 package views
 
 import (
+	"fmt"
+
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/ui/layouts"
 )
@@ -13,6 +15,7 @@ templ List(employers []db.Employer) {
 			</div>
 			<div class="card-body">
 				<form method="post" action="/employers" class="row g-2 align-items-end">
+					// TODO(f3): add csrfField
 					<div class="col-12 col-md-3">
 						<label class="form-label" for="employer-inn">INN</label>
 						<input id="employer-inn" class="form-control" name="inn"/>
@@ -32,6 +35,7 @@ templ List(employers []db.Employer) {
 						<tr>
 							<th>INN</th>
 							<th>Name</th>
+							<th class="text-end">Actions</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -39,11 +43,101 @@ templ List(employers []db.Employer) {
 							<tr>
 								<td>{ employer.Inn }</td>
 								<td>{ employer.CanonicalName }</td>
+								<td class="text-end">
+									<a class="btn btn-sm btn-link" href={ templ.SafeURL(fmt.Sprintf("/employers/%d", employer.ID)) }>Detail</a>
+									<a class="btn btn-sm btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/employers/%d/edit", employer.ID)) }>Edit</a>
+									<form method="post" action={ templ.SafeURL(fmt.Sprintf("/employers/%d/deactivate", employer.ID)) } class="d-inline">
+										// TODO(f3): add csrfField
+										<button class="btn btn-sm btn-warning" type="submit">Deactivate</button>
+									</form>
+								</td>
 							</tr>
 						}
 						if len(employers) == 0 {
 							<tr>
-								<td colspan="2" class="text-secondary">No employers yet.</td>
+								<td colspan="3" class="text-secondary">No employers yet.</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ Edit(employer db.Employer) {
+	@layouts.Shell("Edit employer", "employers") {
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Edit employer</h3>
+			</div>
+			<div class="card-body">
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/employers/%d", employer.ID)) } class="row g-2 align-items-end">
+					// TODO(f3): add csrfField
+					<div class="col-12 col-md-3">
+						<label class="form-label" for="employer-inn">INN</label>
+						<input id="employer-inn" class="form-control" name="inn" value={ employer.Inn }/>
+					</div>
+					<div class="col-12 col-md-6">
+						<label class="form-label" for="employer-name">Canonical name</label>
+						<input id="employer-name" class="form-control" name="canonical_name" value={ employer.CanonicalName }/>
+					</div>
+					<div class="col-12 col-md-auto">
+						<button class="btn btn-primary" type="submit">Save</button>
+						<a class="btn btn-link" href="/employers">Cancel</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	}
+}
+
+templ Detail(employer db.Employer, assignments []db.WorkerEmployer) {
+	@layouts.Shell("Employer", "employers") {
+		<div class="card mb-3">
+			<div class="card-header">
+				<h3 class="card-title">{ employer.CanonicalName }</h3>
+			</div>
+			<div class="card-body">
+				<dl class="row mb-0">
+					<dt class="col-sm-2">INN</dt>
+					<dd class="col-sm-10">{ employer.Inn }</dd>
+					<dt class="col-sm-2">Normalized</dt>
+					<dd class="col-sm-10">{ employer.InnNormalized }</dd>
+				</dl>
+			</div>
+			<div class="card-footer text-end">
+				<a class="btn btn-secondary" href={ templ.SafeURL(fmt.Sprintf("/employers/%d/edit", employer.ID)) }>Edit</a>
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/employers/%d/deactivate", employer.ID)) } class="d-inline">
+					// TODO(f3): add csrfField
+					<button class="btn btn-warning" type="submit">Deactivate</button>
+				</form>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header">
+				<h3 class="card-title">Worker assignments</h3>
+			</div>
+			<div class="table-responsive">
+				<table class="table table-vcenter card-table">
+					<thead>
+						<tr>
+							<th>Worker</th>
+							<th>Position</th>
+							<th>Status</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, a := range assignments {
+							<tr>
+								<td>{ fmt.Sprint(a.WorkerID) }</td>
+								<td>{ a.CurrentPosition }</td>
+								<td>{ a.Status }</td>
+							</tr>
+						}
+						if len(assignments) == 0 {
+							<tr>
+								<td colspan="3" class="text-secondary">No assignments yet.</td>
 							</tr>
 						}
 					</tbody>

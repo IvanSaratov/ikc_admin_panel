@@ -15,7 +15,7 @@ import (
 func TestCreateWorkerRequiresEmail(t *testing.T) {
 	t.Parallel()
 
-	service := people.NewService(nil)
+	service := people.NewService(nil, nil)
 	_, err := service.CreateWorker(context.Background(), people.WorkerForm{
 		LastName:  "Петров",
 		FirstName: "Петр",
@@ -122,5 +122,5 @@ func newService(t *testing.T) (*people.Service, *storagedb.Queries) {
 	}
 
 	queries := storagedb.New(database)
-	return people.NewService(queries), queries
+	return people.NewService(queries, nil), queries
 }

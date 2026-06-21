@@ -14,7 +14,7 @@ import (
 func TestCreateEmployerValidatesRequiredFields(t *testing.T) {
 	t.Parallel()
 
-	service := employers.NewService(nil)
+	service := employers.NewService(nil, nil)
 	_, err := service.Create(context.Background(), employers.Form{})
 	if !errors.Is(err, employers.ErrValidation) {
 		t.Fatalf("error = %v, want validation error", err)
@@ -67,5 +67,5 @@ func newService(t *testing.T) *employers.Service {
 		t.Fatalf("migrate db: %v", err)
 	}
 
-	return employers.NewService(storagedb.New(database))
+	return employers.NewService(storagedb.New(database), nil)
 }

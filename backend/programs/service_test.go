@@ -14,7 +14,7 @@ import (
 func TestCreateProgramGroupValidatesRequiredFields(t *testing.T) {
 	t.Parallel()
 
-	service := programs.NewService(nil)
+	service := programs.NewService(nil, nil)
 	_, err := service.CreateGroup(context.Background(), programs.GroupForm{})
 	if !errors.Is(err, programs.ErrValidation) {
 		t.Fatalf("error = %v, want validation error", err)
@@ -98,5 +98,5 @@ func newService(t *testing.T) *programs.Service {
 		t.Fatalf("migrate db: %v", err)
 	}
 
-	return programs.NewService(storagedb.New(database))
+	return programs.NewService(storagedb.New(database), nil)
 }

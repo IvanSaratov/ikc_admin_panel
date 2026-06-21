@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 )
@@ -36,18 +37,26 @@ type Form struct {
 
 type Service struct {
 	queries *storagedb.Queries
+	audit   *audit.Service
 	now     func() time.Time
 }
 
-func NewService(queries *storagedb.Queries) *Service {
+// NewService constructs an employers.Service. The audit dependency is
+// optional; pass nil in tests that exercise validation only.
+func NewService(queries *storagedb.Queries, auditSvc *audit.Service) *Service {
 	return &Service{
 		queries: queries,
+		audit:   auditSvc,
 		now:     func() time.Time { return time.Now().UTC() },
 	}
 }
 
 func (s *Service) List(ctx context.Context) ([]storagedb.Employer, error) {
 	return s.queries.ListEmployers(ctx)
+}
+
+func (s *Service) Get(ctx context.Context, id int64) (storagedb.Employer, error) {
+	return s.queries.GetEmployerByID(ctx, id)
 }
 
 func (s *Service) Create(ctx context.Context, form Form) (storagedb.Employer, error) {
@@ -81,26 +90,103 @@ func (s *Service) Create(ctx context.Context, form Form) (storagedb.Employer, er
 		return storagedb.Employer{}, fmt.Errorf("create employer: %w", err)
 	}
 
-	_ = s.log(ctx, "employer.created", "employers", employer.ID)
+	s.recordAudit(ctx, audit.RecordInput{
+		Action:     "create",
+		EntityType: "employer",
+		EntityID:   sql.NullInt64{Int64: employer.ID, Valid: true},
+		Details: map[string]any{
+			"inn":            employer.Inn,
+			"canonical_name": employer.CanonicalName,
+		},
+	})
 	return employer, nil
+}
+
+func (s *Service) Update(ctx context.Context, id int64, form Form) (storagedb.Employer, error) {
+	form.INN = strings.TrimSpace(form.INN)
+	form.CanonicalName = strings.TrimSpace(form.CanonicalName)
+	normalizedINN := normalizeDigits(form.INN)
+
+	errs := FieldErrors{}
+	if normalizedINN == "" {
+		errs["inn"] = "Укажите ИНН."
+	}
+	if form.CanonicalName == "" {
+		errs["canonical_name"] = "Укажите название работодателя."
+	}
+	if len(errs) > 0 {
+		return storagedb.Employer{}, errs
+	}
+
+	previous, err := s.queries.GetEmployerByID(ctx, id)
+	if err != nil {
+		return storagedb.Employer{}, fmt.Errorf("get employer: %w", err)
+	}
+
+	updated, err := s.queries.UpdateEmployer(ctx, storagedb.UpdateEmployerParams{
+		Inn:           form.INN,
+		InnNormalized: normalizedINN,
+		CanonicalName: form.CanonicalName,
+		UpdatedAt:     s.timestamp(),
+		ID:            id,
+	})
+	if err != nil {
+		if errors.Is(storage.MapSQLiteError(err), storage.ErrConflict) {
+			return storagedb.Employer{}, FieldErrors{"inn": "Работодатель с таким ИНН уже существует."}
+		}
+		return storagedb.Employer{}, fmt.Errorf("update employer: %w", err)
+	}
+
+	s.recordAudit(ctx, audit.RecordInput{
+		Action:     "update",
+		EntityType: "employer",
+		EntityID:   sql.NullInt64{Int64: updated.ID, Valid: true},
+		Details: map[string]any{
+			"from": employerSnapshot(previous),
+			"to":   employerSnapshot(updated),
+		},
+	})
+	return updated, nil
+}
+
+// Deactivate is a placeholder: employers has no `status` column on MVP schema,
+// so the query only bumps updated_at. The audit row is still recorded so the
+// event is visible in the action_log.
+func (s *Service) Deactivate(ctx context.Context, id int64) (storagedb.Employer, error) {
+	previous, err := s.queries.GetEmployerByID(ctx, id)
+	if err != nil {
+		return storagedb.Employer{}, fmt.Errorf("get employer: %w", err)
+	}
+
+	updated, err := s.queries.DeactivateEmployer(ctx, storagedb.DeactivateEmployerParams{
+		UpdatedAt: s.timestamp(),
+		ID:        id,
+	})
+	if err != nil {
+		return storagedb.Employer{}, fmt.Errorf("deactivate employer: %w", err)
+	}
+
+	s.recordAudit(ctx, audit.RecordInput{
+		Action:     "deactivate",
+		EntityType: "employer",
+		EntityID:   sql.NullInt64{Int64: updated.ID, Valid: true},
+		Details: map[string]any{
+			"from": previous.UpdatedAt,
+			"to":   updated.UpdatedAt,
+		},
+	})
+	return updated, nil
 }
 
 func (s *Service) timestamp() string {
 	return s.now().Format(time.RFC3339)
 }
 
-func (s *Service) log(ctx context.Context, action string, entityType string, entityID int64) error {
-	if s.queries == nil {
-		return nil
+func (s *Service) recordAudit(ctx context.Context, in audit.RecordInput) {
+	if s.audit == nil {
+		return
 	}
-	_, err := s.queries.CreateActionLog(ctx, storagedb.CreateActionLogParams{
-		Actor:      "operator_unidentified",
-		Action:     action,
-		EntityType: entityType,
-		EntityID:   sql.NullInt64{Int64: entityID, Valid: true},
-		CreatedAt:  s.timestamp(),
-	})
-	return err
+	_ = s.audit.Record(ctx, in)
 }
 
 func normalizeDigits(value string) string {
@@ -111,4 +197,13 @@ func normalizeDigits(value string) string {
 		}
 	}
 	return builder.String()
+}
+
+func employerSnapshot(e storagedb.Employer) map[string]any {
+	return map[string]any{
+		"inn":            e.Inn,
+		"inn_normalized": e.InnNormalized,
+		"canonical_name": e.CanonicalName,
+		"updated_at":     e.UpdatedAt,
+	}
 }
