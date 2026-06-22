@@ -7,6 +7,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/documents"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/employers"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/people"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/programs"
@@ -56,6 +57,14 @@ func NewRouter(deps Deps) http.Handler {
 	router := chi.NewRouter()
 	queries := storagedb.New(deps.Database)
 	auditSvc := audit.NewService(queries)
+
+	// D3: the documents Service is the only one that wraps the legacy
+	// XML/DOCX generator. It also backs the top-level GenerateXML /
+	// GenerateDOCX functions called by the handler. We register it as
+	// the process-wide default so callers outside this package (e.g.
+	// tests) can still produce documents.
+	documentSvc := documents.NewService(deps.Database, queries, auditSvc, deps.Log)
+	documents.SetDefaultService(documentSvc)
 
 	adminSvc := admin.NewService(queries)
 	adminStore := admin.NewStore(queries)
@@ -114,6 +123,7 @@ func NewRouter(deps Deps) http.Handler {
 		protocolHandler := protocols.NewHandler(queries, deps.Database, auditSvc)
 		requestHandler := requests.NewHandler(queries, auditSvc, deps.Log)
 		requestHandler.Service().SetDB(deps.Database)
+		documentHandler := documents.NewHandler(queries, auditSvc, documentSvc)
 
 		// Audit log viewer (D4). Read-only — does not write to
 		// action_log. Mutations go through audit.Service.Record from
@@ -163,6 +173,12 @@ func NewRouter(deps Deps) http.Handler {
 		r.Post("/protocols/{id}/participants", protocolHandler.AddParticipant)
 		r.Post("/protocols/{id}/participants/{pid}", protocolHandler.RemoveParticipant)
 		r.Post("/protocols/{id}/transition", protocolHandler.Transition)
+
+		// Documents (D3): generate + download. The POST endpoints are
+		// CSRF-protected by the outer Group; the GET download is a plain
+		// file stream.
+		r.Post("/protocols/{id}/generate", documentHandler.Generate)
+		r.Get("/protocols/{id}/download", documentHandler.Download)
 
 		// Requests (XLSX upload + staging).
 		r.Get("/requests", requestHandler.List)

@@ -95,8 +95,14 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	trainingRecords := h.loadTrainingRecords(ctx, participants)
+	generationRuns, err := h.queries.ListGenerationRunsForProtocol(ctx, id)
+	if err != nil {
+		// Generation runs are best-effort metadata: a missing list
+		// shouldn't break the detail page. Render an empty slice.
+		generationRuns = nil
+	}
 
-	views.Detail(r, p, participants, group.Name, trainingRecords, transitionTargets(p.Status)).Render(ctx, w)
+	views.Detail(r, p, participants, group.Name, trainingRecords, transitionTargets(p.Status), generationRuns).Render(ctx, w)
 }
 
 // Fix handles GET (form) and POST (action) for /protocols/{id}/fix.
