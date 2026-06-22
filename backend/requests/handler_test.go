@@ -452,12 +452,12 @@ func TestApply_POST_RejectsForeignRow(t *testing.T) {
 	// Row belongs to reqA; we will try to apply it via reqB's URL.
 	row, err := queries.CreateRequestRow(ctx, storagedb.CreateRequestRowParams{
 		ClientRequestID: reqA.ID, RowNumber: 1, RawData: "{}",
-		RawFullName: ns("Иванов Иван Иванович"),
+		RawFullName:    ns("Иванов Иван Иванович"),
 		ParsedLastName: ns("Иванов"), ParsedFirstName: ns("Иван"), ParsedMiddleName: ns("Иванович"),
 		ParsedSnils: ns("12345678900"), ParsedEmail: ns("ivanov@example.com"),
 		ParsedPosition: ns("Инженер"),
-		Status:    requests.RowStatusParsed,
-		CreatedAt: now, UpdatedAt: now,
+		Status:         requests.RowStatusParsed,
+		CreatedAt:      now, UpdatedAt: now,
 	})
 	if err != nil {
 		t.Fatalf("seed row: %v", err)
@@ -506,12 +506,12 @@ func TestSkip_POST_RejectsForeignRow(t *testing.T) {
 	})
 	row, _ := queries.CreateRequestRow(ctx, storagedb.CreateRequestRowParams{
 		ClientRequestID: reqA.ID, RowNumber: 1, RawData: "{}",
-		RawFullName: ns("Петров Пётр"),
+		RawFullName:    ns("Петров Пётр"),
 		ParsedLastName: ns("Петров"), ParsedFirstName: ns("Пётр"),
 		ParsedSnils: ns("98765432100"), ParsedEmail: ns("petrov@example.com"),
 		ParsedPosition: ns("Менеджер"),
-		Status:    requests.RowStatusParsed,
-		CreatedAt: now, UpdatedAt: now,
+		Status:         requests.RowStatusParsed,
+		CreatedAt:      now, UpdatedAt: now,
 	})
 
 	skipReq := httptest.NewRequest(http.MethodPost,
@@ -531,4 +531,3 @@ func TestSkip_POST_RejectsForeignRow(t *testing.T) {
 		t.Errorf("row status changed to %q through foreign URL — IDOR!", got.Status)
 	}
 }
-
