@@ -179,8 +179,13 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeAttachment sets the Content-Type + Content-Disposition headers and
-// writes the bytes. fileName defaults to "protocol_<id>.<ext>" when the
-// caller passes an empty string.
+// writes the bytes. fileName defaults to "protocol.<ext>" when the
+// caller passes an empty string. The filename is sanitised before being
+// placed in the Content-Disposition header so a malicious or accidental
+// CRLF / quote in the persisted generation_runs.file_name cannot inject
+// extra headers or break out of the quoted value. Filenames today come
+// only from server-controlled builders (xmlFileName / docxFileName) but
+// the strip happens unconditionally as defense-in-depth.
 func writeAttachment(w http.ResponseWriter, docType string, raw []byte, fileName string) {
 	if fileName == "" {
 		switch docType {
@@ -191,9 +196,37 @@ func writeAttachment(w http.ResponseWriter, docType string, raw []byte, fileName
 		}
 	}
 	w.Header().Set("Content-Type", contentTypeFor(docType))
-	w.Header().Set("Content-Disposition", `attachment; filename="`+fileName+`"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+sanitizeFilename(fileName)+`"`)
 	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
 	_, _ = w.Write(raw)
+}
+
+// sanitizeFilename strips control characters, double quotes, and
+// characters disallowed in HTTP header values from the input. Anything
+// outside a printable ASCII + common punctuation set collapses to '_'.
+// Returns the original string when it is already safe (the common path).
+func sanitizeFilename(name string) string {
+	if name == "" {
+		return name
+	}
+	out := make([]byte, 0, len(name))
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c == '"', c == '\\', c == '\r', c == '\n':
+			out = append(out, '_')
+		case c < 0x20, c == 0x7f:
+			out = append(out, '_')
+		case c >= 0x80:
+			// Non-ASCII: pass through for now (browsers handle UTF-8 filenames
+			// via filename* in RFC 5987, but our typical filenames are ASCII
+			// anyway). Strip to be safe.
+			out = append(out, '_')
+		default:
+			out = append(out, c)
+		}
+	}
+	return string(out)
 }
 
 // parseInt64Param parses a chi URL parameter or query string value into

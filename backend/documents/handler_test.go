@@ -209,3 +209,30 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "..."
 }
+
+func TestSanitizeFilename_StripsCRLFAndQuotes(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		// Common safe path — must pass through untouched.
+		{"protocol_42_2026-06-22T15-04-05Z.xml", "protocol_42_2026-06-22T15-04-05Z.xml"},
+		// CRLF injection attempts collapse to '_'.
+		{"foo\r\nX-Evil: bar.xml", "foo__X-Evil: bar.xml"},
+		{"foo\nbar.xml", "foo_bar.xml"},
+		{"foo\rbar.xml", "foo_bar.xml"},
+		// Quote / backslash are HTTP-header-significant; replace.
+		{`foo"; ls -la #.xml`, "foo_; ls -la #.xml"},
+		{`foo\bar.xml`, "foo_bar.xml"},
+		// NUL byte and other control chars.
+		{"foo\x00bar.xml", "foo_bar.xml"},
+		{"foo\x1b[31mRED.xml", "foo_[31mRED.xml"},
+		// Empty input stays empty.
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got := sanitizeFilename(tc.in)
+		if got != tc.want {
+			t.Errorf("sanitizeFilename(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
