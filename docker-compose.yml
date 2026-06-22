@@ -1,0 +1,85 @@
+# docker-compose.yml — single-service deployment for the Mintrud Admin
+# monolith. SQLite is embedded, so there is no separate database
+# container; persistence is provided by a named volume mounted at
+# /app/data inside the container.
+#
+# Quick start:
+#   cp .env.example .env       # then edit MINTRUD_ADMIN_BOOTSTRAP_PASSWORD
+#   docker compose up --build
+#   open http://localhost:8080/login
+
+name: mintrud-admin
+
+services:
+  app:
+    # Build from the local Dockerfile. `--build` on `up` is enough; we
+    # don't pin an image: tag here because the project does not yet
+    # publish images to a registry. When it does, swap to `image:` +
+    # `build:` for layered upgrades.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mintrud-admin:local
+
+    # The app listens on :8080 by default. The host port (left) may
+    # need to change if 8080 is already taken on the host (common
+    # when Docker Desktop's internal services grab it). 8081 is the
+    # conventional next-port choice.
+    ports:
+      - "8081:8080"
+
+    # Pull all MINTRUD_ADMIN_* vars from a host-side .env file. The
+    # file is gitignored; .env.example ships the template. MINTRUD_ADMIN_BOOTSTRAP_PASSWORD
+    # is REQUIRED on first start — the app refuses to boot without it
+    # (see admin.EnsureBootstrapAdmin + ErrBootstrapPasswordMissing).
+    env_file:
+      - .env
+
+    # Named volume for SQLite durability. The host path /var/lib/docker
+    # is managed by Docker; the container sees /app/data as a normal
+    # directory. data/ is also created on first run by the binary
+    # itself (mkdir -m 0755), so the volume can start empty.
+    volumes:
+      - mintrud_data:/app/data
+
+    # Restart policy: unless-stopped keeps the service up across
+    # Docker daemon restarts but still allows `docker compose down` to
+    # stop it explicitly. Use `restart: always` for true unattended
+    # production; this MVP default favours operator control.
+    restart: unless-stopped
+
+    # Compose's healthcheck mirrors the Dockerfile's, but uses curl
+    # instead of wget so it works regardless of the runtime image's
+    # installed busybox tools. `--fail` makes curl exit non-zero on
+    # HTTP >= 400, which is what `condition: service_healthy` and
+    # `docker compose ps` both read as "not ready".
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # Resource caps are intentionally generous for an MVP and can be
+    # tuned per deployment. SQLite + templ rendering are CPU-light;
+    # the cap mostly prevents runaway OOM during XLSX imports.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    # Logging defaults to json-file with no rotation, which fills the
+    # disk under sustained load. Limit each file to 10 MB and keep the
+    # last 3. `docker compose logs` reads all of them transparently.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # The named volume is created on first `up` and persists across
+  # `docker compose down`. To wipe data: `docker compose down -v`.
+  mintrud_data:

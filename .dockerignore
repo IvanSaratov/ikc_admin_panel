@@ -1,0 +1,48 @@
+# Local VCS metadata — biggest single non-source payload. Never ship.
+.git
+.gitignore
+.gitattributes
+
+# Docker artefacts are generated, not part of the build source.
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# Runtime data that lives on the host, not in the image.
+data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Local env files (compose reads .env from the host, never from image).
+.env
+.env.*
+!.env.example
+
+# Documentation / planning that's irrelevant to compilation.
+docs/
+README.md
+*.md
+LICENSE*
+
+# Test scaffolding — schema tests run from the host, not in the image.
+tests/
+tmp/
+temp/
+coverage.out
+coverage.html
+
+# OS / editor junk.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated build outputs that the builder regenerates anyway.
+backend/storage/db/models.go
+backend/storage/db/*.sql.go
+backend/storage/queries/*.sql.go
+**/*_templ.go

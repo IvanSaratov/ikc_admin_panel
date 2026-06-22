@@ -166,3 +166,105 @@ func TestLoadSessionConfig(t *testing.T) {
 		t.Errorf("SameSite default = %d, want SameSiteLaxMode", cfg.SameSite)
 	}
 }
+
+// TestSplitCSV locks the comma-separated env parser used for
+// MINTRUD_ADMIN_TRUSTED_ORIGINS (and any future list-valued env).
+// Empty string → nil (signals "unset"), whitespace around items is
+// trimmed, empty entries are dropped.
+func TestSplitCSV(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"empty yields nil", "", nil},
+		{"single entry", "http://localhost:8081", []string{"http://localhost:8081"}},
+		{"multiple entries trimmed", " a , b ,c ", []string{"a", "b", "c"}},
+		{"drops empty segments", "a,,b, ,c", []string{"a", "b", "c"}},
+		{"trailing comma tolerated", "a,b,", []string{"a", "b"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := splitCSV(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("splitCSV(%q) len = %d, want %d (%v)", tc.in, len(got), len(tc.want), got)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("splitCSV(%q)[%d] = %q, want %q", tc.in, i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestTruthy covers every recognised form plus a few that should be
+// rejected. Used by LoadCSRF to read MINTRUD_ADMIN_PLAINTEXT_CSRF.
+func TestTruthy(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"", false}, {"0", false}, {"false", false}, {"no", false},
+		{"off", false}, {"garbage", false},
+		{"1", true}, {"true", true}, {"True", true}, {"TRUE", true},
+		{"t", true}, {"yes", true}, {"y", true}, {"on", true},
+		{"  true  ", true}, // trimming
+	}
+	for _, tc := range cases {
+		if got := truthy(tc.in); got != tc.want {
+			t.Errorf("truthy(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestLoadCSRF_PlaintextFlag verifies that MINTRUD_ADMIN_PLAINTEXT_CSRF
+// changes the wrapper behaviour: when set, the middleware calls
+// csrf.PlaintextHTTPRequest on every request (so HTTP referers pass
+// gorilla/csrf v1.7+ downgrade checks); when unset, it does not.
+//
+// We can't observe the wrapper's effect on the inner CSRF middleware
+// directly without driving an actual HTTP request through it, so the
+// test exercises the practical smoke: a wrapped middleware must still
+// invoke the inner handler on a plain GET.
+func TestLoadCSRF_PlaintextFlag(t *testing.T) {
+	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
+	t.Setenv(EnvPlaintextCSRF, "true")
+
+	mw, err := LoadCSRF()
+	if err != nil {
+		t.Fatalf("LoadCSRF: %v", err)
+	}
+	if mw == nil {
+		t.Fatal("LoadCSRF returned nil middleware")
+	}
+
+	called := false
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if !called {
+		t.Error("plaintext wrapper did not invoke inner handler")
+	}
+}
+
+// TestLoadCSRF_TrustedOrigins verifies the env var is wired into the
+// csrf.TrustedOrigins option when non-empty. The middleware still has
+// to run a real request to exercise the check end-to-end, but the
+// load path must succeed and return a non-nil middleware.
+func TestLoadCSRF_TrustedOrigins(t *testing.T) {
+	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
+	t.Setenv(EnvPlaintextCSRF, "")
+	t.Setenv(EnvTrustedOrigins, "http://localhost:8081, http://example.com")
+
+	mw, err := LoadCSRF()
+	if err != nil {
+		t.Fatalf("LoadCSRF with TrustedOrigins: %v", err)
+	}
+	if mw == nil {
+		t.Fatal("LoadCSRF returned nil middleware")
+	}
+}
