@@ -53,7 +53,7 @@ go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
 cp .env.example .env
 # отредактируйте MINTRUD_ADMIN_BOOTSTRAP_PASSWORD в .env
 # для локального HTTP-деплоя оставьте MINTRUD_ADMIN_PLAINTEXT_CSRF=true
-DOCKER_BUILDKIT=1 docker compose up --build
+DOCKER_BUILDKIT=1 docker compose up --build -d
 ```
 
 `DOCKER_BUILDKIT=1` нужен из-за бага Docker Desktop 29.x: legacy-builder
@@ -68,14 +68,41 @@ POST-формы получают 403. За reverse proxy с TLS-терминац
 прокси передаёт `https://`-схему в Go-процесс и middleware работает
 штатно.
 
-После старта приложение доступно на <http://localhost:8080/login> (порт
-хоста задаётся в `docker-compose.yml`; в репо `8081`, потому что 8080
-часто занят самим Docker Desktop). Данные переживают `docker compose
-down` (volume сохраняется); полная очистка — `docker compose down -v`.
-Логи: `docker compose logs -f app`. Healthcheck через `docker compose ps`
-показывает `healthy` после ~10 секунд.
+После старта приложение доступно на <http://localhost:8081/login>. Порт
+хоста задаётся в `docker-compose.yml`; контейнер слушает `8080`, наружу
+в репо опубликован `8081`, потому что `8080` часто занят самим Docker
+Desktop.
+
+Полезные команды:
+
+```bash
+docker compose ps
+docker compose logs -f app
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8081/login
+docker compose down
+docker compose down -v # полная очистка SQLite volume
+```
+
+Данные переживают `docker compose down` (volume сохраняется). Healthcheck
+через `docker compose ps` показывает `healthy` после ~10 секунд.
 
 Multi-stage `Dockerfile`: builder на `golang:1.26.4-alpine` с
 sqlc/templ для перегенерации, runtime на `alpine:3.20` с `tini` (PID-1
 reaper). Бинарь собирается статически (`CGO_ENABLED=0`), поэтому в
 runtime нет зависимостей кроме libc + ca-certificates.
+
+## Публикация репозитория
+
+Перед открытой публикацией проверьте, что в git не попали локальные
+секреты и реальные персональные данные:
+
+```bash
+git status --short --ignored
+git ls-files -z | xargs -0 rg -l --hidden --no-ignore -i \
+  '(password|secret|token|api[_-]?key|private[_-]?key|ИНН|СНИЛС|паспорт|email|@)'
+```
+
+`.env` и локальные SQLite-файлы игнорируются через `.gitignore` и
+`.dockerignore`; коммитить нужно только `.env.example`. Fixture/seed-данные
+должны быть явно синтетическими: используйте домены `.example` или
+`example.test`, тестовые ФИО и ненастоящие организации.
