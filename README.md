@@ -3,18 +3,23 @@
 Внутренняя админка ИКЦ Эксперт для замены XLSX как источника истины по
 Минтруд-процессу.
 
-## Текущий slice
+## Текущее состояние
 
-Реализован первый технический slice:
+Приложение уже включает рабочий vertical slice внутренней админки:
 
 - SQLite schema и goose migrations;
 - Go server на `net/http` + `chi`;
 - server-rendered UI на `templ`;
-- ручные формы для групп программ, работодателей и слушателей;
-- базовое назначение слушателя работодателю;
-- `action_log` для ручных изменений.
+- auth baseline: login, sessions, CSRF, bootstrap admin, login rate limit;
+- ручные формы для групп программ, программ, работодателей и слушателей;
+- назначение слушателей работодателям;
+- импорт XLSX-заявок в staging rows и применение строк;
+- протоколы: создание, фиксация номера, участники и переходы состояния;
+- генерация XML/DOCX через изолированный legacy adapter;
+- `action_log` для ручных, auth, import, protocol и document events.
 
-Пока не входят: заявки, протоколы, XLSX, XML/DOCX, Moodle, auth/RBAC.
+Пока не входят: Moodle integration, полная RBAC-модель, production installer/MSI
+и расширенная наблюдаемость за пределами application logs.
 
 ## Локальный запуск
 
