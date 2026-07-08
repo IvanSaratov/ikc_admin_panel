@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,17 +12,25 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/app"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/platform/logging"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	logger, err := newLoggerFromEnv(os.Stdout)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FATAL: invalid log configuration")
+		os.Exit(1)
+	}
+
+	if err := run(logger); err != nil {
+		logger.Fatal(err)
 	}
 }
 
-func run() error {
+func run(logger logrus.FieldLogger) error {
 	ctx := context.Background()
 	addr := env("MINTRUD_ADMIN_ADDR", ":8080")
 	dbPath := env("MINTRUD_ADMIN_DB", filepath.Join("data", "mintrud-admin.db"))
@@ -44,23 +51,16 @@ func run() error {
 
 	queries := storagedb.New(database)
 	if err := admin.EnsureBootstrapAdmin(ctx, admin.NewStore(queries), queries, os.Getenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD")); err != nil {
-		if errors.Is(err, admin.ErrBootstrapPasswordMissing) {
-			// Surface as a clear stderr message and exit non-zero so an
-			// operator running under systemd / docker immediately sees
-			// what to do.
-			fmt.Fprintln(os.Stderr, "FATAL: "+err.Error())
-			os.Exit(1)
-		}
 		return err
 	}
 
-	server, err := app.NewServer(addr, database, nil)
+	server, err := app.NewServer(addr, database, logger)
 	if err != nil {
 		return err
 	}
 	serverErr := make(chan error, 1)
 	go func() {
-		log.Printf("Mintrud Admin listening on http://localhost%s", addr)
+		logger.WithField("addr", addr).Info("Mintrud Admin listening")
 		serverErr <- server.ListenAndServe()
 	}()
 
@@ -75,6 +75,15 @@ func run() error {
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
 	}
+}
+
+func newLoggerFromEnv(output io.Writer) (*logrus.Logger, error) {
+	return logging.New(logging.Config{
+		Env:    os.Getenv("MINTRUD_ADMIN_ENV"),
+		Level:  os.Getenv("MINTRUD_ADMIN_LOG_LEVEL"),
+		Format: os.Getenv("MINTRUD_ADMIN_LOG_FORMAT"),
+		Output: output,
+	})
 }
 
 func env(key string, fallback string) string {

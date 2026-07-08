@@ -21,12 +21,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
+	log "github.com/sirupsen/logrus"
 )
 
 // now is the canonical "seed moment" — all created_at / updated_at

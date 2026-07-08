@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+
+	"github.com/sirupsen/logrus"
+)
 
 // TestEnv verifies the env() helper returns the env var when set and
 // the fallback otherwise. Used by run() to read MINTRUD_ADMIN_ADDR
@@ -18,5 +23,23 @@ func TestEnv_ReturnsFallbackWhenUnset(t *testing.T) {
 	t.Setenv("MINTRUD_ADMIN_TEST_KEY", "")
 	if got := env("MINTRUD_ADMIN_TEST_KEY", "fallback"); got != "fallback" {
 		t.Errorf("env() = %q, want fallback", got)
+	}
+}
+
+func TestNewLoggerFromEnv_UsesRuntimeEnv(t *testing.T) {
+	t.Setenv("MINTRUD_ADMIN_ENV", "prod")
+	t.Setenv("MINTRUD_ADMIN_LOG_LEVEL", "debug")
+	t.Setenv("MINTRUD_ADMIN_LOG_FORMAT", "json")
+
+	var out bytes.Buffer
+	logger, err := newLoggerFromEnv(&out)
+	if err != nil {
+		t.Fatalf("newLoggerFromEnv: %v", err)
+	}
+	if logger.Level != logrus.DebugLevel {
+		t.Fatalf("level = %v, want debug", logger.Level)
+	}
+	if _, ok := logger.Formatter.(*logrus.JSONFormatter); !ok {
+		t.Fatalf("formatter = %T, want JSONFormatter", logger.Formatter)
 	}
 }
