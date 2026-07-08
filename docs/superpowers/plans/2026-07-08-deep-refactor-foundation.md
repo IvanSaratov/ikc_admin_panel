@@ -178,7 +178,7 @@ Expected: commit succeeds with only documentation files.
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go get github.com/sirupsen/logrus@v1.9.3
+GOCACHE=/private/tmp/ikc-go-build go get github.com/sirupsen/logrus@v1.9.3
 ```
 
 Expected: `go.mod` contains `github.com/sirupsen/logrus v1.9.3`.
@@ -252,7 +252,7 @@ func TestNewRejectsInvalidFormat(t *testing.T) {
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/platform/logging
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/platform/logging
 ```
 
 Expected: FAIL because `Config` and `New` are undefined.
@@ -345,7 +345,7 @@ func formatter(env string, format string) (logrus.Formatter, error) {
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/platform/logging
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/platform/logging
 ```
 
 Expected: PASS.
@@ -730,7 +730,7 @@ Expected: no matches.
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/admin ./backend/requests ./backend/documents
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/admin ./backend/requests ./backend/documents
 ```
 
 Expected: PASS.
@@ -846,7 +846,7 @@ Keep existing `log.Fatalf` and `log.Printf` calls working through the logrus pac
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./cmd/mintrud-admin ./cmd/seed ./backend/app
+GOCACHE=/private/tmp/ikc-go-build go test ./cmd/mintrud-admin ./cmd/seed ./backend/app
 ```
 
 Expected: PASS.
@@ -971,7 +971,7 @@ Add `io` import if it is not already present.
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/app -run TestRequestLoggingMiddlewareWritesSafeFields -count=1
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/app -run TestRequestLoggingMiddlewareWritesSafeFields -count=1
 ```
 
 Expected: FAIL because no request logging middleware writes those fields.
@@ -1091,7 +1091,7 @@ This order matters: `RequireAuth` publishes the user login, `withActor` copies i
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/app -run TestRequestLoggingMiddlewareWritesSafeFields -count=1
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/app -run TestRequestLoggingMiddlewareWritesSafeFields -count=1
 ```
 
 Expected: PASS.
@@ -1101,7 +1101,7 @@ Expected: PASS.
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/app
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/app
 ```
 
 Expected: PASS.
@@ -1334,7 +1334,7 @@ func NewRouter(deps Deps) http.Handler {
 Run:
 
 ```bash
-GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build go test ./backend/app
+GOCACHE=/private/tmp/ikc-go-build go test ./backend/app
 ```
 
 Expected: PASS.

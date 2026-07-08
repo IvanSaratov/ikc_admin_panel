@@ -1,4 +1,4 @@
-GO_RUN_ENV := GOMODCACHE=/private/tmp/ikc-go-mod GOCACHE=/private/tmp/ikc-go-build
+GO_RUN_ENV := GOCACHE=/private/tmp/ikc-go-build
 
 .PHONY: schema-test test sqlc templ run
 
