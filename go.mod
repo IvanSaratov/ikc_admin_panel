@@ -8,6 +8,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/gorilla/csrf v1.7.3
 	github.com/pressly/goose/v3 v3.27.1
+	github.com/sirupsen/logrus v1.9.3
 	github.com/xuri/excelize/v2 v2.10.1
 	golang.org/x/crypto v0.53.0
 	modernc.org/sqlite v1.51.0
