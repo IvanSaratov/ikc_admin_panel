@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"io"
-	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +22,7 @@ import (
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gorilla/csrf"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -96,12 +96,14 @@ func mountTestRouter(t *testing.T) (http.Handler, *scs.SessionManager, *storaged
 	csrfMW = func(next http.Handler) http.Handler { return next }
 
 	auditSvc := audit.NewService(queries)
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
 
 	router := app.NewRouter(app.Deps{
 		Database: db,
 		Sessions: sm,
 		CSRF:     csrfMW,
-		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:      logger,
 	})
 	_ = auditSvc
 	return router, sm, queries, db

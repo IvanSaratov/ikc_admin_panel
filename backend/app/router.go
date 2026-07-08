@@ -2,7 +2,6 @@ package app
 
 import (
 	"database/sql"
-	"log/slog"
 	"net/http"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
@@ -16,6 +15,7 @@ import (
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
+	"github.com/sirupsen/logrus"
 )
 
 // Deps bundles the runtime dependencies NewRouter needs to wire auth
@@ -26,7 +26,7 @@ type Deps struct {
 	Sessions  *scs.SessionManager
 	CSRF      func(http.Handler) http.Handler
 	LoginRate *admin.RateLimiter
-	Log       *slog.Logger
+	Log       logrus.FieldLogger
 }
 
 // NewRouter wires the application router with F3 auth baseline:
@@ -39,7 +39,7 @@ type Deps struct {
 // — there's no route that can accidentally skip auth or CSRF.
 func NewRouter(deps Deps) http.Handler {
 	if deps.Log == nil {
-		deps.Log = slog.Default()
+		deps.Log = logrus.StandardLogger()
 	}
 	if deps.Sessions == nil {
 		// Tests that don't care about sessions construct their own Deps

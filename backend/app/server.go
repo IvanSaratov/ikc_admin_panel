@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/alexedwards/scs/v2"
+	"github.com/sirupsen/logrus"
 )
 
 type Server struct {
@@ -23,9 +23,9 @@ type Server struct {
 // the caller (main.go) doesn't have to repeat env-handling logic. If
 // any of the underlying constructors fails (e.g. bad CSRF key), the
 // error is returned at startup rather than at first-request.
-func NewServer(addr string, database *sql.DB, log *slog.Logger) (*Server, error) {
+func NewServer(addr string, database *sql.DB, log logrus.FieldLogger) (*Server, error) {
 	if log == nil {
-		log = slog.Default()
+		log = logrus.StandardLogger()
 	}
 
 	sessionCfg, err := admin.LoadSessionConfig()

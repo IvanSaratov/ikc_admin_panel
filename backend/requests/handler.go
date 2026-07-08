@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/requests/views"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/go-chi/chi/v5"
+	"github.com/sirupsen/logrus"
 )
 
 // Handler wires the requests.Service into HTTP routes. All routes are
@@ -27,14 +27,14 @@ type Handler struct {
 	service *Service
 	queries *storagedb.Queries
 	audit   *audit.Service
-	log     *slog.Logger
+	log     logrus.FieldLogger
 }
 
 // NewHandler constructs a requests.Handler. db is wired into the
 // service so ApplyRow can use storage.WithTx.
-func NewHandler(queries *storagedb.Queries, auditSvc *audit.Service, log *slog.Logger) *Handler {
+func NewHandler(queries *storagedb.Queries, auditSvc *audit.Service, log logrus.FieldLogger) *Handler {
 	if log == nil {
-		log = slog.Default()
+		log = logrus.StandardLogger()
 	}
 	svc := NewService(queries, auditSvc)
 	return &Handler{
@@ -54,7 +54,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	items, err := h.service.ListRequests(r.Context(), status)
 	if err != nil {
-		h.log.Error("list requests", "err", err)
+		h.log.WithError(err).Error("list requests")
 		http.Error(w, "list requests: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -67,7 +67,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) NewRequestForm(w http.ResponseWriter, r *http.Request) {
 	employers, err := h.queries.ListEmployers(r.Context())
 	if err != nil {
-		h.log.Error("list employers for new request", "err", err)
+		h.log.WithError(err).Error("list employers for new request")
 		http.Error(w, "list employers: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -119,10 +119,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		// break structured log parsing (log injection vector).
 		// The hash is recomputed once the body is read; here we log
 		// the header bytes alone (no body yet).
-		h.log.Warn("upload with unusual content-type",
-			"content_type_hash", sha256Hex([]byte(header.Header.Get("Content-Type"))),
-			"filename_hash", sha256Hex([]byte(header.Filename)),
-		)
+		h.log.WithFields(logrus.Fields{
+			"content_type_hash": sha256Hex([]byte(header.Header.Get("Content-Type"))),
+			"filename_hash":     sha256Hex([]byte(header.Filename)),
+		}).Warn("upload with unusual content-type")
 	}
 
 	data, err := io.ReadAll(file)
@@ -152,7 +152,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		// Parser errors (empty file / missing sheet / missing columns)
 		// fall through to a 400 with the raw message — the operator
 		// needs to see exactly what went wrong.
-		h.log.Warn("upload rejected", "err", err)
+		h.log.WithError(err).Warn("upload rejected")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -214,7 +214,10 @@ func (h *Handler) ApplyRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.service.ApplyRow(r.Context(), rowID); err != nil {
-		h.log.Warn("apply row", "request_id", requestID, "row_id", rowID, "err", err)
+		h.log.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"row_id":     rowID,
+		}).WithError(err).Warn("apply row")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -234,7 +237,10 @@ func (h *Handler) SkipRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.service.SkipRow(r.Context(), rowID); err != nil {
-		h.log.Warn("skip row", "request_id", requestID, "row_id", rowID, "err", err)
+		h.log.WithFields(logrus.Fields{
+			"request_id": requestID,
+			"row_id":     rowID,
+		}).WithError(err).Warn("skip row")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -249,7 +255,7 @@ func (h *Handler) rowBelongsToRequest(ctx context.Context, requestID, rowID int6
 	row, err := h.queries.GetRequestRow(ctx, rowID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			h.log.Error("lookup request row for authz", "err", err)
+			h.log.WithError(err).Error("lookup request row for authz")
 		}
 		return false
 	}

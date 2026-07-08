@@ -195,10 +195,10 @@ var (
 // inlined into docx.go) preserves the adapter-layer rule: only files in
 // backend/documents/ that touch legacy/* are this one and xml.go.
 //
-// The slog adapter (see backend/documents/legacy/logadapter.go) wraps
-// the process slog default; passing it to the legacy FieldLogger keeps
+// The logrus adapter (see backend/documents/legacy/logadapter.go) wraps
+// the process logrus default; passing it to the legacy FieldLogger keeps
 // the legacy code path identical to the upstream behaviour without
-// pulling logrus in.
+// exposing the rest of the app's logging architecture to legacy code.
 func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string) ([][]byte, error) {
 	if set == nil {
 		return nil, fmt.Errorf("legacyCreateDocx: nil registry set")
@@ -206,5 +206,5 @@ func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string)
 	if len(template) == 0 {
 		return nil, fmt.Errorf("legacyCreateDocx: empty template")
 	}
-	return legacy.CreateDocx(set, string(template), timeType, legacy.NewSlogAdapter())
+	return legacy.CreateDocx(set, string(template), timeType, legacy.NewLogrusAdapter())
 }

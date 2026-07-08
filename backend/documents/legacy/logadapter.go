@@ -1,17 +1,10 @@
 package legacy
 
-import (
-	"fmt"
-	"log/slog"
-)
+import "github.com/sirupsen/logrus"
 
-// FieldLogger is the subset of logrus.FieldLogger we use in the vendored
-// legacy code (CreateDocx + internalCreateDocx). It is the surface area
-// that the adapter satisfies, kept narrow on purpose: anything more would
-// imply a deeper runtime dependency on logrus.
-//
-// The methods are intentionally plain (no key/value pairs) because that is
-// what the legacy call sites use today.
+// FieldLogger — минимальная поверхность logger, которую использует legacy
+// generator. Она совпадает с нужной частью logrus и не даёт legacy-коду
+// диктовать остальную logging-архитектуру приложения.
 type FieldLogger interface {
 	Infof(format string, args ...any)
 	Debugf(format string, args ...any)
@@ -23,92 +16,27 @@ type FieldLogger interface {
 	Error(args ...any)
 }
 
-// slogAdapter bridges the project's stdlib *slog.Logger into the
-// FieldLogger interface the vendored legacy code expects. It is used as
-// the `log` argument of legacy.CreateDocx.
-//
-// Why not vendor logrus? The project standard is log/slog. Adding logrus
-// purely to satisfy a 4-call dependency would inflate the dep graph and
-// split logging configuration. The adapter keeps the legacy code untouched
-// (apart from the package rename + import path) and centralises the bridge
-// in one file so it can be deleted the day the legacy goes away.
-//
-// Nil safety: passing a nil *slog.Logger is allowed and routes everything
-// through slog.Default(). This is convenient for tests and for the
-// caller's defensive case ("log may be nil").
-type slogAdapter struct {
-	log *slog.Logger
+type logrusAdapter struct {
+	log logrus.FieldLogger
 }
 
-// newSlogAdapter returns a FieldLogger backed by the supplied *slog.Logger.
-// A nil logger falls back to slog.Default() so callers don't have to nil-
-// check at every call site.
-func newSlogAdapter(log *slog.Logger) FieldLogger {
+func newLogrusAdapter(log logrus.FieldLogger) FieldLogger {
 	if log == nil {
-		log = slog.Default()
+		log = logrus.StandardLogger()
 	}
-	return &slogAdapter{log: log}
+	return &logrusAdapter{log: log}
 }
 
-// NewSlogAdapter is the exported alias of newSlogAdapter used by the
-// adapter layer (backend/documents/adapter_legacy.go) and by tests
-// that want to route legacy log output through slog.Default().
-func NewSlogAdapter() FieldLogger {
-	return newSlogAdapter(nil)
+// NewLogrusAdapter возвращает logger для legacy generator.
+func NewLogrusAdapter() FieldLogger {
+	return newLogrusAdapter(nil)
 }
 
-// Infof logs at LevelInfo with the formatted string as the message.
-func (a *slogAdapter) Infof(format string, args ...any) {
-	a.log.Info(fmt.Sprintf(format, args...))
-}
-
-// Debugf logs at LevelDebug.
-func (a *slogAdapter) Debugf(format string, args ...any) {
-	a.log.Debug(fmt.Sprintf(format, args...))
-}
-
-// Warnf logs at LevelWarn.
-func (a *slogAdapter) Warnf(format string, args ...any) {
-	a.log.Warn(fmt.Sprintf(format, args...))
-}
-
-// Errorf logs at LevelError.
-func (a *slogAdapter) Errorf(format string, args ...any) {
-	a.log.Error(fmt.Sprintf(format, args...))
-}
-
-// Info forwards to slog.Info with the first argument as message; remaining
-// args (if any) are joined with spaces to mirror fmt.Sprint semantics. This
-// is the closest logrus-compatible behaviour without dragging in logrus.
-func (a *slogAdapter) Info(args ...any) {
-	a.log.Info(joinArgs(args))
-}
-
-// Debug mirrors Info at LevelDebug.
-func (a *slogAdapter) Debug(args ...any) {
-	a.log.Debug(joinArgs(args))
-}
-
-// Warn mirrors Info at LevelWarn.
-func (a *slogAdapter) Warn(args ...any) {
-	a.log.Warn(joinArgs(args))
-}
-
-// Error mirrors Info at LevelError.
-func (a *slogAdapter) Error(args ...any) {
-	a.log.Error(joinArgs(args))
-}
-
-func joinArgs(args []any) string {
-	switch len(args) {
-	case 0:
-		return ""
-	case 1:
-		if s, ok := args[0].(string); ok {
-			return s
-		}
-	}
-	// fmt.Sprint with mixed args keeps the behaviour obvious for tests and
-	// for anyone reading the legacy call sites.
-	return fmt.Sprint(args...)
-}
+func (a *logrusAdapter) Infof(format string, args ...any)  { a.log.Infof(format, args...) }
+func (a *logrusAdapter) Debugf(format string, args ...any) { a.log.Debugf(format, args...) }
+func (a *logrusAdapter) Warnf(format string, args ...any)  { a.log.Warnf(format, args...) }
+func (a *logrusAdapter) Errorf(format string, args ...any) { a.log.Errorf(format, args...) }
+func (a *logrusAdapter) Info(args ...any)                  { a.log.Info(args...) }
+func (a *logrusAdapter) Debug(args ...any)                 { a.log.Debug(args...) }
+func (a *logrusAdapter) Warn(args ...any)                  { a.log.Warn(args...) }
+func (a *logrusAdapter) Error(args ...any)                 { a.log.Error(args...) }

@@ -4,12 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gorilla/csrf"
+	"github.com/sirupsen/logrus"
 )
 
 // EnvCSRFKey is the env var that supplies the CSRF authKey.
@@ -154,7 +154,7 @@ func resolveCSRFKey() ([]byte, error) {
 	if _, err := rand.Read(buf); err != nil {
 		return nil, fmt.Errorf("generate csrf key: %w", err)
 	}
-	slog.Warn(
+	logrus.Warn(
 		"MINTRUD_ADMIN_CSRF_KEY is unset; generated an ephemeral per-process CSRF key. " +
 			"Tokens will be invalidated on every restart. Set MINTRUD_ADMIN_CSRF_KEY to a stable 32-byte hex value.",
 	)

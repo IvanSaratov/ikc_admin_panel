@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -156,6 +156,7 @@ func newFrozenTestHandler(t *testing.T) *Handler {
 
 	auditSvc := audit.NewService(queries)
 	svc := NewService(queries)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
 	return NewHandler(svc, auditSvc, sm, logger)
 }

@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,7 +12,14 @@ import (
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
+	"github.com/sirupsen/logrus"
 )
+
+func discardLogger() *logrus.Logger {
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	return logger
+}
 
 func TestRateLimiter_AllowsRequestsUnderLimit(t *testing.T) {
 	t.Parallel()
@@ -131,7 +137,7 @@ func TestLoginRateLimitMiddleware_AllowsNonLoginPaths(t *testing.T) {
 	rl.Allow("9.9.9.9")
 
 	called := false
-	handler := LoginRateLimitMiddleware(rl, slog.Default(), nil)(
+	handler := LoginRateLimitMiddleware(rl, discardLogger(), nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 			w.WriteHeader(http.StatusOK)
@@ -162,7 +168,7 @@ func TestLoginRateLimitMiddleware_BlocksPOSTLogin(t *testing.T) {
 	// Drain.
 	rl.Allow("9.9.9.9")
 
-	handler := LoginRateLimitMiddleware(rl, slog.Default(), nil)(
+	handler := LoginRateLimitMiddleware(rl, discardLogger(), nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Fatalf("handler should not be called when rate-limited")
 		}),
@@ -201,7 +207,7 @@ func TestLoginRateLimitMiddleware_AuditsRejection(t *testing.T) {
 			auditCalled <- struct{}{}
 		}
 	}}
-	handler := LoginRateLimitMiddleware(rl, slog.Default(), wrapper)(
+	handler := LoginRateLimitMiddleware(rl, discardLogger(), wrapper)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
 	)
 

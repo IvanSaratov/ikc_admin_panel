@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
+	"github.com/sirupsen/logrus"
 )
 
 // auditRecorder is the minimal audit surface LoginRateLimitMiddleware
@@ -121,9 +121,9 @@ func (r *RateLimiter) Reset() {
 // IP extraction uses r.RemoteAddr with the port stripped. The Mintrud
 // Admin MVP runs behind a single reverse proxy in production; if the
 // proxy strips X-Forwarded-For, add it as a secondary signal here.
-func LoginRateLimitMiddleware(rl *RateLimiter, log *slog.Logger, auditSvc auditRecorder) func(http.Handler) http.Handler {
+func LoginRateLimitMiddleware(rl *RateLimiter, log logrus.FieldLogger, auditSvc auditRecorder) func(http.Handler) http.Handler {
 	if log == nil {
-		log = slog.Default()
+		log = logrus.StandardLogger()
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,14 +154,14 @@ func LoginRateLimitMiddleware(rl *RateLimiter, log *slog.Logger, auditSvc auditR
 						"retry_after_seconds": int(retryAfter.Seconds() + 0.5),
 					},
 				}); err != nil {
-					log.Error("audit login.rate_limited", slog.String("err", err.Error()))
+					log.WithError(err).Error("audit login.rate_limited")
 				}
 			}
 
-			log.Warn("login rate limit exceeded",
-				slog.String("ip", ip),
-				slog.Duration("retry_after", retryAfter),
-			)
+			log.WithFields(logrus.Fields{
+				"ip":          ip,
+				"retry_after": retryAfter.String(),
+			}).Warn("login rate limit exceeded")
 			seconds := int(retryAfter.Seconds() + 0.5)
 			if seconds < 1 {
 				seconds = 1

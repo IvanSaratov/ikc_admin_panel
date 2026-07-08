@@ -2,10 +2,10 @@ package admin
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
+	"github.com/sirupsen/logrus"
 )
 
 // SessionKeyUserID is the scs session key under which we store the
@@ -66,9 +66,9 @@ func UserLoginFromContext(ctx context.Context) string {
 // audit attribution. A disabled-user check belongs at login time
 // (Service.Authenticate) — a session issued to an active user remains
 // valid for its TTL.
-func RequireAuth(sm *scs.SessionManager, log *slog.Logger) func(http.Handler) http.Handler {
+func RequireAuth(sm *scs.SessionManager, log logrus.FieldLogger) func(http.Handler) http.Handler {
 	if log == nil {
-		log = slog.Default()
+		log = logrus.StandardLogger()
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

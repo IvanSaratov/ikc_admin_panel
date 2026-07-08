@@ -3,7 +3,6 @@ package admin_test
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"github.com/gorilla/csrf"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -73,7 +73,8 @@ func newTestHandler(t *testing.T) (*admin.Handler, *scs.SessionManager, *audit.S
 
 	auditSvc := audit.NewService(queries)
 	svc := admin.NewService(queries)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
 	h := admin.NewHandler(svc, auditSvc, sm, logger)
 	admin.SetDefaultHandler(h)
 
