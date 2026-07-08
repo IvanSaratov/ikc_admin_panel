@@ -1,4 +1,5 @@
 .DS_Store
+.worktrees/
 
 # Local databases and generated data
 *.db
