@@ -242,15 +242,9 @@ func TestTruthy(t *testing.T) {
 	}
 }
 
-// TestLoadCSRF_PlaintextFlag verifies that MINTRUD_ADMIN_PLAINTEXT_CSRF
-// changes the wrapper behaviour: when set, the middleware calls
-// csrf.PlaintextHTTPRequest on every request (so HTTP referers pass
-// gorilla/csrf v1.7+ downgrade checks); when unset, it does not.
-//
-// We can't observe the wrapper's effect on the inner CSRF middleware
-// directly without driving an actual HTTP request through it, so the
-// test exercises the practical smoke: a wrapped middleware must still
-// invoke the inner handler on a plain GET.
+// TestLoadCSRF_PlaintextFlag проверяет, что локальный HTTP-режим не отключает
+// проверку CSRF token. Plaintext mode должен только пометить request безопасным
+// для referer-проверок gorilla/csrf, а не обходить csrf.Protect.
 func TestLoadCSRF_PlaintextFlag(t *testing.T) {
 	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
 	t.Setenv(EnvPlaintextCSRF, "true")
@@ -267,11 +261,14 @@ func TestLoadCSRF_PlaintextFlag(t *testing.T) {
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 	}))
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if !called {
-		t.Error("plaintext wrapper did not invoke inner handler")
+	if called {
+		t.Error("plaintext wrapper bypassed CSRF protection")
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
 	}
 }
 

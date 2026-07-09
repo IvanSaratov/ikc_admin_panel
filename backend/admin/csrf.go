@@ -96,10 +96,10 @@ func LoadCSRFWithLogger(log logrus.FieldLogger) (func(http.Handler) http.Handler
 	// flag — see EnvPlaintextCSRF for why this is dev-only.
 	if truthy(os.Getenv(EnvPlaintextCSRF)) {
 		return func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			return mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				r = csrf.PlaintextHTTPRequest(r)
 				next.ServeHTTP(w, r)
-			})
+			}))
 		}, nil
 	}
 

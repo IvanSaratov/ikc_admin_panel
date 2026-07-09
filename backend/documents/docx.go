@@ -100,7 +100,7 @@ func generateDOCXImpl(ctx context.Context, svc *Service, q *storagedb.Queries, p
 	// RegistryRecord and pick the per-program code here.
 	timeType := "А"
 
-	parts, err := legacyCreateDocx(registrySet, template, timeType)
+	parts, err := legacyCreateDocx(registrySet, template, timeType, svc.log)
 	if err != nil {
 		run, _ := svc.recordGenerationRun(ctx, protocolID, "docx", "failed", "", err.Error())
 		svc.recordAudit(ctx, "documents.generate.failed", protocolID, map[string]any{

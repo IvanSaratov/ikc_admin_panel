@@ -11,6 +11,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/documents/legacy/models"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/protocols"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"github.com/sirupsen/logrus"
 )
 
 // ErrProtocolNotFixed is returned when callers ask to generate a document
@@ -194,15 +195,14 @@ var (
 // вызывает старый DOCX pipeline. Держим ее здесь, а не в docx.go, чтобы
 // правило adapter-layer оставалось явным: legacy/* трогают только этот файл и xml.go.
 //
-// Logrus adapter из backend/documents/legacy/logadapter.go оборачивает
-// process default logger; так legacy FieldLogger сохраняет прежнее поведение
-// без раскрытия остальной logging-архитектуры приложения legacy-коду.
-func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string) ([][]byte, error) {
+// Logrus adapter из backend/documents/legacy/logadapter.go оборачивает runtime
+// logger приложения без раскрытия остальной logging-архитектуры legacy-коду.
+func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string, log logrus.FieldLogger) ([][]byte, error) {
 	if set == nil {
 		return nil, fmt.Errorf("legacyCreateDocx: nil registry set")
 	}
 	if len(template) == 0 {
 		return nil, fmt.Errorf("legacyCreateDocx: empty template")
 	}
-	return legacy.CreateDocx(set, string(template), timeType, legacy.NewLogrusAdapter())
+	return legacy.CreateDocx(set, string(template), timeType, legacy.NewLogrusAdapterWithLogger(log))
 }

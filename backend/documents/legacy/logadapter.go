@@ -32,6 +32,11 @@ func NewLogrusAdapter() FieldLogger {
 	return newLogrusAdapter(nil)
 }
 
+// NewLogrusAdapterWithLogger подключает legacy generator к runtime logger приложения.
+func NewLogrusAdapterWithLogger(log logrus.FieldLogger) FieldLogger {
+	return newLogrusAdapter(log)
+}
+
 func (a *logrusAdapter) Infof(format string, args ...any)  { a.log.Infof(format, args...) }
 func (a *logrusAdapter) Debugf(format string, args ...any) { a.log.Debugf(format, args...) }
 func (a *logrusAdapter) Warnf(format string, args ...any)  { a.log.Warnf(format, args...) }
