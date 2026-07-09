@@ -1,8 +1,10 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +18,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/gorilla/csrf"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -295,6 +298,58 @@ func TestMutation_AlwaysWritesAudit(t *testing.T) {
 	}
 }
 
+func TestRequestLoggingMiddlewareWritesSafeFields(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := logrus.New()
+	logger.SetFormatter(&logrus.JSONFormatter{})
+	logger.SetOutput(&logBuf)
+
+	router, _ := newTestRouterWithDBAndLog(t, logger)
+	cookies := testLoginPOST(t, router)
+
+	rec := authedGET(t, router, "/programs?csrf_token=test-password", cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /programs status = %d, want 200", rec.Code)
+	}
+
+	var programsLog map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(logBuf.String()), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("parse log line %q: %v", line, err)
+		}
+		if entry["method"] == http.MethodGet && entry["path"] == "/programs" {
+			programsLog = entry
+			break
+		}
+	}
+	if programsLog == nil {
+		t.Fatalf("GET /programs log entry not found in: %s", logBuf.String())
+	}
+	if programsLog["status"] != float64(http.StatusOK) {
+		t.Fatalf("status = %v, want 200", programsLog["status"])
+	}
+	if programsLog["actor"] != "admin" {
+		t.Fatalf("actor = %v, want admin", programsLog["actor"])
+	}
+	if _, ok := programsLog["duration_ms"]; !ok {
+		t.Fatalf("duration_ms missing from log: %#v", programsLog)
+	}
+	if _, ok := programsLog["remote_ip"]; !ok {
+		t.Fatalf("remote_ip missing from log: %#v", programsLog)
+	}
+
+	logs := logBuf.String()
+	for _, forbidden := range []string{"test-password", "csrf_token"} {
+		if strings.Contains(logs, forbidden) {
+			t.Fatalf("log contains forbidden value %q: %s", forbidden, logs)
+		}
+	}
+}
+
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	router, _ := newTestRouterWithDB(t)
@@ -306,6 +361,10 @@ func newTestRouter(t *testing.T) http.Handler {
 // with a real session manager and a CSRF middleware (using a fixed test
 // key) so all routes behave the way they do in production.
 func newTestRouterWithDB(t *testing.T) (http.Handler, *sql.DB) {
+	return newTestRouterWithDBAndLog(t, nil)
+}
+
+func newTestRouterWithDBAndLog(t *testing.T, logger logrus.FieldLogger) (http.Handler, *sql.DB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -347,6 +406,7 @@ func newTestRouterWithDB(t *testing.T) (http.Handler, *sql.DB) {
 		Database: db,
 		Sessions: sessions,
 		CSRF:     csrfMW,
+		Log:      logger,
 	}), db
 }
 

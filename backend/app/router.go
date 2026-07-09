@@ -71,19 +71,7 @@ func NewRouter(deps Deps) http.Handler {
 	adminHandler := admin.NewHandler(adminSvc, auditSvc, deps.Sessions, deps.Log)
 	admin.SetDefaultHandler(adminHandler)
 
-	// Wire actor propagation: RequireAuth publishes the login on the
-	// request context via audit.WithActor so downstream audit.Record
-	// calls attribute the row to the operator. We do this by wrapping
-	// the inner handler with a small adapter that injects the actor.
 	authMiddleware := admin.RequireAuth(deps.Sessions, deps.Log)
-	withActor := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if login := admin.UserLoginFromContext(r.Context()); login != "" {
-				r = r.WithContext(audit.WithActor(r.Context(), login))
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 
 	// scs LoadAndSave + CSRF on every request (including /login).
 	router.Use(deps.Sessions.LoadAndSave)
@@ -96,18 +84,19 @@ func NewRouter(deps Deps) http.Handler {
 	// The login rate limiter sits BETWEEN csrf and the PostLogin handler
 	// so brute-force POSTs are rejected before the bcrypt path. The
 	// middleware is a no-op on every other route; see its docs.
-	router.Get("/login", adminHandler.GetLogin)
+	router.With(requestLogger(deps.Log)).Get("/login", adminHandler.GetLogin)
 	if deps.LoginRate != nil {
-		router.With(admin.LoginRateLimitMiddleware(deps.LoginRate, deps.Log, auditSvc)).
+		router.With(requestLogger(deps.Log), admin.LoginRateLimitMiddleware(deps.LoginRate, deps.Log, auditSvc)).
 			Post("/login", adminHandler.PostLogin)
 	} else {
-		router.Post("/login", adminHandler.PostLogin)
+		router.With(requestLogger(deps.Log)).Post("/login", adminHandler.PostLogin)
 	}
 
 	// Protected group: everything else goes through auth.
 	router.Group(func(r chi.Router) {
 		r.Use(authMiddleware)
 		r.Use(withActor)
+		r.Use(requestLogger(deps.Log))
 
 		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 			http.Redirect(w, req, "/programs", http.StatusSeeOther)
