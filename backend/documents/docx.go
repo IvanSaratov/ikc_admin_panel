@@ -124,7 +124,7 @@ func generateDOCXImpl(ctx context.Context, svc *Service, q *storagedb.Queries, p
 	fileName := docxFileName(svc, protocolID)
 	run, err := svc.recordGenerationRun(ctx, protocolID, "docx", "success", fileName, "")
 	if err != nil {
-		svc.log.Error("insert generation_runs row after docx success", "protocol_id", protocolID, "err", err)
+		svc.log.WithField("protocol_id", protocolID).WithError(err).Error("insert generation_runs row after docx success")
 		return zipped, nil, nil
 	}
 	svc.recordAudit(ctx, "documents.generate.completed", protocolID, map[string]any{

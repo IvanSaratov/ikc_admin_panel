@@ -34,7 +34,7 @@ func NewServer(addr string, database *sql.DB, log logrus.FieldLogger) (*Server, 
 	}
 	sessions := admin.NewSessionManager(sessionCfg)
 
-	csrfMW, err := admin.LoadCSRF()
+	csrfMW, err := admin.LoadCSRFWithLogger(log)
 	if err != nil {
 		return nil, fmt.Errorf("load csrf: %w", err)
 	}

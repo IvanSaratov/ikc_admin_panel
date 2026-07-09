@@ -190,15 +190,13 @@ var (
 	_ = legacy.GenerateXML
 )
 
-// legacyCreateDocx is the single seam through which backend/documents/
-// calls the legacy DOCX pipeline. Keeping it in this file (rather than
-// inlined into docx.go) preserves the adapter-layer rule: only files in
-// backend/documents/ that touch legacy/* are this one and xml.go.
+// legacyCreateDocx — единственная точка, через которую backend/documents
+// вызывает старый DOCX pipeline. Держим ее здесь, а не в docx.go, чтобы
+// правило adapter-layer оставалось явным: legacy/* трогают только этот файл и xml.go.
 //
-// The logrus adapter (see backend/documents/legacy/logadapter.go) wraps
-// the process logrus default; passing it to the legacy FieldLogger keeps
-// the legacy code path identical to the upstream behaviour without
-// exposing the rest of the app's logging architecture to legacy code.
+// Logrus adapter из backend/documents/legacy/logadapter.go оборачивает
+// process default logger; так legacy FieldLogger сохраняет прежнее поведение
+// без раскрытия остальной logging-архитектуры приложения legacy-коду.
 func legacyCreateDocx(set *models.RegistrySet, template []byte, timeType string) ([][]byte, error) {
 	if set == nil {
 		return nil, fmt.Errorf("legacyCreateDocx: nil registry set")

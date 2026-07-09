@@ -57,16 +57,19 @@ const csrfFieldName = "csrf_token"
 // non-form clients (JSON APIs, fetch()). Mirrors gorilla/csrf default.
 const csrfRequestHeader = "X-CSRF-Token"
 
-// LoadCSRF returns a CSRF middleware built from environment configuration.
-//
-// Contract (frozen): returns (middleware, nil) on success or
-// (nil, error) on misconfiguration. The middleware is intentionally
-// stateful (per-process key); when MINTRUD_ADMIN_CSRF_KEY is missing a
-// per-process random key is generated and a WARN log line is emitted
-// (without the key value) so operators know sessions will not survive
-// restart.
+// LoadCSRF сохраняет прежний публичный контракт и использует стандартный logger.
 func LoadCSRF() (func(http.Handler) http.Handler, error) {
-	key, err := resolveCSRFKey()
+	return LoadCSRFWithLogger(logrus.StandardLogger())
+}
+
+// LoadCSRFWithLogger собирает CSRF middleware из env-настроек и пишет
+// предупреждения через переданный runtime logger без значений секретов.
+func LoadCSRFWithLogger(log logrus.FieldLogger) (func(http.Handler) http.Handler, error) {
+	if log == nil {
+		log = logrus.StandardLogger()
+	}
+
+	key, err := resolveCSRFKeyWithLogger(log)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +136,10 @@ func splitCSV(s string) []string {
 }
 
 func resolveCSRFKey() ([]byte, error) {
+	return resolveCSRFKeyWithLogger(logrus.StandardLogger())
+}
+
+func resolveCSRFKeyWithLogger(log logrus.FieldLogger) ([]byte, error) {
 	if raw := os.Getenv(EnvCSRFKey); raw != "" {
 		// Prefer hex decoding; fall back to raw bytes if not valid hex.
 		if decoded, err := hex.DecodeString(raw); err == nil {
@@ -154,7 +161,7 @@ func resolveCSRFKey() ([]byte, error) {
 	if _, err := rand.Read(buf); err != nil {
 		return nil, fmt.Errorf("generate csrf key: %w", err)
 	}
-	logrus.Warn(
+	log.Warn(
 		"MINTRUD_ADMIN_CSRF_KEY is unset; generated an ephemeral per-process CSRF key. " +
 			"Tokens will be invalidated on every restart. Set MINTRUD_ADMIN_CSRF_KEY to a stable 32-byte hex value.",
 	)

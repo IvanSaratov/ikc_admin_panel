@@ -1,11 +1,14 @@
 package admin
 
 import (
+	"bytes"
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/sirupsen/logrus"
 )
 
 // TestPadOrTruncate locks the CSRF key-length normaliser: input of the
@@ -118,6 +121,27 @@ func TestLoadCSRF_ReturnsMiddleware(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if !called {
 		t.Error("wrapped handler was not invoked")
+	}
+}
+
+func TestLoadCSRFWithLogger_UsesProvidedLogger(t *testing.T) {
+	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
+
+	var out bytes.Buffer
+	logger := logrus.New()
+	logger.SetOutput(&out)
+	logger.SetFormatter(&logrus.JSONFormatter{})
+
+	if _, err := LoadCSRFWithLogger(logger); err != nil {
+		t.Fatalf("LoadCSRFWithLogger: %v", err)
+	}
+
+	logOutput := out.String()
+	if !strings.Contains(logOutput, "MINTRUD_ADMIN_CSRF_KEY is unset") {
+		t.Fatalf("log output missing csrf warning: %s", logOutput)
+	}
+	if strings.Contains(logOutput, "csrf_token") {
+		t.Fatalf("log output contains csrf token name: %s", logOutput)
 	}
 }
 

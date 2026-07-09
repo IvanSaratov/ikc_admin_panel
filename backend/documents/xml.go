@@ -71,7 +71,7 @@ func generateXMLImpl(ctx context.Context, svc *Service, q *storagedb.Queries, pr
 		// Bytes were produced successfully; the run is missing only as a
 		// bookkeeping failure. Return the bytes anyway with a nil pointer
 		// and the storage error so the operator gets a usable download.
-		svc.log.Error("insert generation_runs row after xml success", "protocol_id", protocolID, "err", err)
+		svc.log.WithField("protocol_id", protocolID).WithError(err).Error("insert generation_runs row after xml success")
 		return raw, nil, nil
 	}
 	svc.recordAudit(ctx, "documents.generate.completed", protocolID, map[string]any{
