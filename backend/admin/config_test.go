@@ -5,9 +5,11 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/gorilla/csrf"
 	"github.com/sirupsen/logrus"
 )
 
@@ -269,6 +271,57 @@ func TestLoadCSRF_PlaintextFlag(t *testing.T) {
 	}
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}
+
+// TestLoadCSRF_PlaintextFlag_AllowsValidHTTPReferer проверяет позитивный
+// локальный HTTP flow: валидный token и HTTP Referer должны пройти, когда
+// MINTRUD_ADMIN_PLAINTEXT_CSRF явно включен.
+func TestLoadCSRF_PlaintextFlag_AllowsValidHTTPReferer(t *testing.T) {
+	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", strings.Repeat("ab", 32))
+	t.Setenv(EnvPlaintextCSRF, "true")
+
+	mw, err := LoadCSRF()
+	if err != nil {
+		t.Fatalf("LoadCSRF: %v", err)
+	}
+
+	postCalled := false
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(csrf.Token(r)))
+			return
+		}
+		postCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "http://example.com/form", nil))
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want 200", getRec.Code)
+	}
+	token := getRec.Body.String()
+	if token == "" {
+		t.Fatal("empty csrf token")
+	}
+
+	form := url.Values{}
+	form.Set("csrf_token", token)
+	postReq := httptest.NewRequest(http.MethodPost, "http://example.com/form", strings.NewReader(form.Encode()))
+	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	postReq.Header.Set("Referer", "http://example.com/form")
+	for _, cookie := range getRec.Result().Cookies() {
+		postReq.AddCookie(cookie)
+	}
+
+	postRec := httptest.NewRecorder()
+	handler.ServeHTTP(postRec, postReq)
+	if !postCalled {
+		t.Fatalf("valid plaintext CSRF POST did not reach handler, status=%d", postRec.Code)
+	}
+	if postRec.Code != http.StatusNoContent {
+		t.Fatalf("POST status = %d, want 204", postRec.Code)
 	}
 }
 
