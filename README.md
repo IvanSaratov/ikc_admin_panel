@@ -24,12 +24,15 @@
 ## Локальный запуск
 
 ```bash
-make schema-test
-make sqlc
-make templ
-make test
-make run
+sh tests/run_schema_tests.sh
+go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
+go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
+go test ./...
+go run ./cmd/mintrud-admin
 ```
+
+Версии sqlc (`v1.30.0`) и templ (`v0.3.1020`) pinned в этих командах и в
+`Dockerfile` — держите их синхронно.
 
 По умолчанию приложение слушает `:8080` и создает SQLite DB в
 `data/mintrud-admin.db`.
@@ -37,16 +40,7 @@ make run
 Переопределение:
 
 ```bash
-MINTRUD_ADMIN_ADDR=:8090 MINTRUD_ADMIN_DB=/tmp/mintrud-admin.db make run
-```
-
-## Проверки
-
-```bash
-sh tests/run_schema_tests.sh
-go test ./...
-go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
-go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
+MINTRUD_ADMIN_ADDR=:8090 MINTRUD_ADMIN_DB=/tmp/mintrud-admin.db go run ./cmd/mintrud-admin
 ```
 
 ## Запуск в Docker

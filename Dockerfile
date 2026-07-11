@@ -4,7 +4,7 @@
 # builder small; git is required for `go mod download` to fetch modules.
 FROM golang:1.26.4-alpine AS builder
 
-# sqlc and templ versions must match the Makefile pins. We install them
+# sqlc and templ versions must match the ones documented in README.md. We install them
 # with `go install` so the binary lands in GOBIN (default $GOPATH/bin)
 # and is on PATH for the subsequent generate steps. The runtime image
 # does not need either tool — the generated sources are baked into the
