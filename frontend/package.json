@@ -11,12 +11,15 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "lucide-react": "latest",
+    "motion": "^12.42.2",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "react-router": "^8.2.0",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@playwright/test": "latest",
