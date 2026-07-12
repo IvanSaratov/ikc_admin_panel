@@ -1,8 +1,10 @@
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, useNavigate } from "react-router";
 import type { ReactElement } from "react";
 
+import { login } from "../api/client";
 import { InDevelopmentPage } from "../components/feedback/InDevelopmentPage";
 import { AnalyticsPage } from "../features/analytics/AnalyticsPage";
+import { LoginPage } from "../features/auth/LoginPage";
 import { AuditPage } from "../features/audit/AuditPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { DocumentsPage } from "../features/documents/DocumentsPage";
@@ -63,10 +65,23 @@ const shellRoutes = appRoutes.map((route) => ({
   element: routeElements[route.id] ?? <PageStub title={route.label} />,
 }));
 
+function LoginRoute() {
+  const navigate = useNavigate();
+
+  return (
+    <LoginPage
+      onLogin={async (input) => {
+        await login(input);
+        await navigate("/dashboard", { replace: true });
+      }}
+    />
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: "/login",
-    element: <PageStub title="Вход" />,
+    element: <LoginRoute />,
   },
   {
     path: "/",

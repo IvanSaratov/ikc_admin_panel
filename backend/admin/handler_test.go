@@ -2,6 +2,7 @@ package admin_test
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,12 @@ import (
 //
 // It also seeds a known user so the login flow has something to verify.
 func newTestHandler(t *testing.T) (*admin.Handler, *scs.SessionManager, *audit.Service, http.Handler) {
+	t.Helper()
+	h, sm, auditSvc, mount, _ := newTestHandlerWithDB(t)
+	return h, sm, auditSvc, mount
+}
+
+func newTestHandlerWithDB(t *testing.T) (*admin.Handler, *scs.SessionManager, *audit.Service, http.Handler, *sql.DB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -78,15 +85,29 @@ func newTestHandler(t *testing.T) (*admin.Handler, *scs.SessionManager, *audit.S
 	h := admin.NewHandler(svc, auditSvc, sm, logger)
 	admin.SetDefaultHandler(h)
 
-	// Build a router that mirrors app.NewRouter: scs LoadAndSave + CSRF
-	// globally, then /login public, everything else authed.
-	router := http.NewServeMux()
-	router.HandleFunc("GET /login", h.GetLogin)
-	router.HandleFunc("POST /login", h.PostLogin)
+	// Build a router that mirrors app.NewRouter: scs LoadAndSave globally,
+	// CSRF on legacy HTML login, and JSON auth API outside CSRF.
+	htmlRouter := http.NewServeMux()
+	htmlRouter.HandleFunc("GET /login", h.GetLogin)
+	htmlRouter.HandleFunc("POST /login", h.PostLogin)
+	htmlHandler := csrfMW(htmlRouter)
 
-	mount := csrfMW(sm.LoadAndSave(router))
+	apiRouter := http.NewServeMux()
+	apiRouter.HandleFunc("GET /api/session", h.GetSessionJSON)
+	apiRouter.HandleFunc("POST /api/login", h.PostLoginJSON)
+	apiRouter.HandleFunc("POST /api/logout", h.PostLogoutJSON)
 
-	return h, sm, auditSvc, mount
+	router := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			apiRouter.ServeHTTP(w, r)
+			return
+		}
+		htmlHandler.ServeHTTP(w, r)
+	})
+
+	mount := sm.LoadAndSave(router)
+
+	return h, sm, auditSvc, mount, db
 }
 
 func TestLogin_GET_RendersForm(t *testing.T) {

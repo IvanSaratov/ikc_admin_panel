@@ -402,8 +402,78 @@ func TestSessionAPI_ReturnsJSON(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
 		t.Fatalf("Content-Type = %q, want application/json", ct)
 	}
-	if body := strings.TrimSpace(rec.Body.String()); body != `{"authenticated":true}` {
+	if body := strings.TrimSpace(rec.Body.String()); body != `{"authenticated":false}` {
 		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestAPILogin_WorksWithoutCSRFToken(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouterWithFrontendMode(t, app.FrontendDisabled)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"login":"admin","password":"test-password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/login status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Authenticated bool   `json:"authenticated"`
+		Login         string `json:"login"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if !body.Authenticated || body.Login != "admin" {
+		t.Fatalf("body = %+v, want authenticated admin", body)
+	}
+}
+
+func TestLegacyLogin_RequiresCSRFToken(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouterWithFrontendMode(t, app.FrontendDisabled)
+
+	form := url.Values{}
+	form.Set("login", "admin")
+	form.Set("password", "test-password")
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", "http://example.com/login")
+	req.Host = "example.com"
+	req = csrf.PlaintextHTTPRequest(req)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST /login status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAPILogin_RateLimitedWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouterWithLoginRate(t, admin.NewRateLimiter(1, time.Hour, nil))
+
+	first := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"login":"admin","password":"WRONG"}`))
+	first.Header.Set("Content-Type", "application/json")
+	first.RemoteAddr = "203.0.113.9:1234"
+	firstRec := httptest.NewRecorder()
+	router.ServeHTTP(firstRec, first)
+	if firstRec.Code != http.StatusUnauthorized {
+		t.Fatalf("first POST /api/login status = %d, want 401; body=%s", firstRec.Code, firstRec.Body.String())
+	}
+
+	second := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"login":"admin","password":"WRONG"}`))
+	second.Header.Set("Content-Type", "application/json")
+	second.RemoteAddr = "203.0.113.9:5678"
+	secondRec := httptest.NewRecorder()
+	router.ServeHTTP(secondRec, second)
+	if secondRec.Code != http.StatusTooManyRequests {
+		t.Fatalf("second POST /api/login status = %d, want 429; body=%s", secondRec.Code, secondRec.Body.String())
 	}
 }
 
@@ -432,6 +502,16 @@ func newTestRouterWithFrontendMode(t *testing.T, mode app.FrontendMode) http.Han
 }
 
 func newTestRouterWithFrontend(t *testing.T, logger logrus.FieldLogger, frontend app.FrontendConfig) (http.Handler, *sql.DB) {
+	return newTestRouterWithFrontendAndLoginRate(t, logger, frontend, nil)
+}
+
+func newTestRouterWithLoginRate(t *testing.T, loginRate *admin.RateLimiter) http.Handler {
+	t.Helper()
+	router, _ := newTestRouterWithFrontendAndLoginRate(t, nil, app.FrontendConfig{Mode: app.FrontendDisabled}, loginRate)
+	return router
+}
+
+func newTestRouterWithFrontendAndLoginRate(t *testing.T, logger logrus.FieldLogger, frontend app.FrontendConfig, loginRate *admin.RateLimiter) (http.Handler, *sql.DB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -470,11 +550,12 @@ func newTestRouterWithFrontend(t *testing.T, logger logrus.FieldLogger, frontend
 	)
 
 	return app.NewRouter(app.Deps{
-		Database: db,
-		Sessions: sessions,
-		CSRF:     csrfMW,
-		Log:      logger,
-		Frontend: frontend,
+		Database:  db,
+		Sessions:  sessions,
+		CSRF:      csrfMW,
+		LoginRate: loginRate,
+		Log:       logger,
+		Frontend:  frontend,
 	}), db
 }
 

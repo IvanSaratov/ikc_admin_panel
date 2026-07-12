@@ -113,10 +113,10 @@ func (r *RateLimiter) Reset() {
 	r.buckets = make(map[string]*tokenBucket)
 }
 
-// LoginRateLimitMiddleware enforces the rate limit ONLY on POST /login.
+// LoginRateLimitMiddleware enforces the rate limit ONLY on login POST routes.
 // Other routes are unaffected. On rejection it writes a 429 with a
-// Retry-After header and a small HTML body, and audits the rejection
-// so operators can alert on bursts.
+// Retry-After header and a response shaped for the route, and audits the
+// rejection so operators can alert on bursts.
 //
 // IP extraction uses r.RemoteAddr with the port stripped. The Mintrud
 // Admin MVP runs behind a single reverse proxy in production; if the
@@ -127,9 +127,9 @@ func LoginRateLimitMiddleware(rl *RateLimiter, log logrus.FieldLogger, auditSvc 
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Cheap fast-path: only POST /login is rate-limited. This
+			// Cheap fast-path: only login POST routes are rate-limited. This
 			// guard means other admin routes never pay the mutex cost.
-			if r.URL.Path != "/login" || r.Method != http.MethodPost {
+			if !isLoginRateLimitedRequest(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -167,6 +167,12 @@ func LoginRateLimitMiddleware(rl *RateLimiter, log logrus.FieldLogger, auditSvc 
 				seconds = 1
 			}
 			w.Header().Set("Retry-After", strconv.Itoa(seconds))
+			if r.URL.Path == "/api/login" {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"error":"rate_limited"}` + "\n"))
+				return
+			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = w.Write([]byte(`<html><body><h1>429 Too Many Requests</h1>` +
@@ -174,6 +180,13 @@ func LoginRateLimitMiddleware(rl *RateLimiter, log logrus.FieldLogger, auditSvc 
 				`</body></html>`))
 		})
 	}
+}
+
+func isLoginRateLimitedRequest(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	return r.URL.Path == "/login" || r.URL.Path == "/api/login"
 }
 
 // clientIP extracts the IP from r.RemoteAddr, stripping the port.

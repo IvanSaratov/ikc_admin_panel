@@ -20,8 +20,9 @@ type Deps struct {
 	Frontend  FrontendConfig
 }
 
-// NewRouter собирает роутер с общей базой авторизации: Sessions.LoadAndSave,
-// затем CSRF для каждого запроса, затем регистрация публичных и защищенных URL.
+// NewRouter собирает роутер с общей базой авторизации: Sessions.LoadAndSave
+// применяется ко всем запросам, JSON API регистрируется без CSRF, а legacy
+// HTML routes остаются под CSRF до удаления server-rendered UI.
 func NewRouter(deps Deps) http.Handler {
 	if deps.Log == nil {
 		deps.Log = logrus.StandardLogger()
@@ -37,11 +38,13 @@ func NewRouter(deps Deps) http.Handler {
 
 	router := chi.NewRouter()
 	router.Use(deps.Sessions.LoadAndSave)
-	router.Use(deps.CSRF)
 
 	container := newContainer(deps)
 	registerAPIRoutes(router, deps, container)
-	registerRoutes(router, deps, container)
+	router.Group(func(r chi.Router) {
+		r.Use(deps.CSRF)
+		registerRoutes(r, deps, container)
+	})
 	registerFrontendRoutes(router, deps.Frontend)
 
 	return router

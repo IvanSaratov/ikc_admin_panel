@@ -1,16 +1,19 @@
 package app
 
 import (
-	"net/http"
-
+	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/go-chi/chi/v5"
 )
 
 func registerAPIRoutes(router chi.Router, deps Deps, c *container) {
 	router.Route("/api", func(r chi.Router) {
-		r.Get("/session", func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_, _ = w.Write([]byte(`{"authenticated":true}`))
-		})
+		r.Get("/session", c.adminHandler.GetSessionJSON)
+		if deps.LoginRate != nil {
+			r.With(admin.LoginRateLimitMiddleware(deps.LoginRate, deps.Log, c.auditSvc)).
+				Post("/login", c.adminHandler.PostLoginJSON)
+		} else {
+			r.Post("/login", c.adminHandler.PostLoginJSON)
+		}
+		r.Post("/logout", c.adminHandler.PostLogoutJSON)
 	})
 }

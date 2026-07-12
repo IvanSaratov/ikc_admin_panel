@@ -144,7 +144,7 @@ func TestLoginRateLimitMiddleware_AllowsNonLoginPaths(t *testing.T) {
 		}),
 	)
 
-	for _, path := range []string{"/", "/programs", "/logout", "/login"} {
+	for _, path := range []string{"/", "/programs", "/logout", "/login", "/api/session", "/api/logout"} {
 		// GET /login must NOT be rate-limited (form render is cheap).
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.RemoteAddr = "9.9.9.9:1234"
@@ -161,37 +161,70 @@ func TestLoginRateLimitMiddleware_AllowsNonLoginPaths(t *testing.T) {
 	}
 }
 
-func TestLoginRateLimitMiddleware_BlocksPOSTLogin(t *testing.T) {
+func TestLoginRateLimitMiddleware_BlocksLoginPosts(t *testing.T) {
 	t.Parallel()
 
-	rl := NewRateLimiter(1, time.Minute, nil)
-	// Drain.
-	rl.Allow("9.9.9.9")
+	for _, tc := range []struct {
+		name        string
+		path        string
+		contentType string
+		body        string
+		wantType    string
+		wantBody    string
+	}{
+		{
+			name:        "legacy",
+			path:        "/login",
+			contentType: "application/x-www-form-urlencoded",
+			body:        "login=admin&password=wrong",
+			wantType:    "text/html",
+			wantBody:    "Too Many Requests",
+		},
+		{
+			name:        "api",
+			path:        "/api/login",
+			contentType: "application/json",
+			body:        `{"login":"admin","password":"wrong"}`,
+			wantType:    "application/json",
+			wantBody:    "rate_limited",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	handler := LoginRateLimitMiddleware(rl, discardLogger(), nil)(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			t.Fatalf("handler should not be called when rate-limited")
-		}),
-	)
+			rl := NewRateLimiter(1, time.Minute, nil)
+			// Drain.
+			rl.Allow("9.9.9.9")
 
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("login=admin&password=wrong"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.RemoteAddr = "9.9.9.9:1234"
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+			handler := LoginRateLimitMiddleware(rl, discardLogger(), nil)(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					t.Fatalf("handler should not be called when rate-limited")
+				}),
+			)
 
-	if rec.Code != http.StatusTooManyRequests {
-		t.Errorf("status = %d, want 429", rec.Code)
-	}
-	retry := rec.Header().Get("Retry-After")
-	if retry == "" {
-		t.Errorf("Retry-After header missing")
-	} else if n, err := strconv.Atoi(retry); err != nil || n < 1 {
-		t.Errorf("Retry-After = %q, want positive integer seconds", retry)
-	}
-	body, _ := io.ReadAll(rec.Body)
-	if !strings.Contains(string(body), "Too Many Requests") {
-		t.Errorf("body = %q, want user-facing explanation", string(body))
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.contentType)
+			req.RemoteAddr = "9.9.9.9:1234"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusTooManyRequests {
+				t.Errorf("status = %d, want 429", rec.Code)
+			}
+			retry := rec.Header().Get("Retry-After")
+			if retry == "" {
+				t.Errorf("Retry-After header missing")
+			} else if n, err := strconv.Atoi(retry); err != nil || n < 1 {
+				t.Errorf("Retry-After = %q, want positive integer seconds", retry)
+			}
+			if contentType := rec.Header().Get("Content-Type"); !strings.Contains(contentType, tc.wantType) {
+				t.Errorf("Content-Type = %q, want %q", contentType, tc.wantType)
+			}
+			body, _ := io.ReadAll(rec.Body)
+			if !strings.Contains(string(body), tc.wantBody) {
+				t.Errorf("body = %q, want %q", string(body), tc.wantBody)
+			}
+		})
 	}
 }
 
