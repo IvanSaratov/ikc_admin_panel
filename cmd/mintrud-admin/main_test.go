@@ -3,10 +3,48 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"go.uber.org/zap/zapcore"
 )
+
+func TestFrontendAssetsDir_PrefersRepositoryRootLayout(t *testing.T) {
+	root := t.TempDir()
+	distDir := filepath.Join(root, "frontend", "dist")
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("create frontend dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(distDir, "index.html"), nil, 0o644); err != nil {
+		t.Fatalf("create frontend index: %v", err)
+	}
+	t.Chdir(root)
+
+	if got := frontendAssetsDir(); got != filepath.Join("frontend", "dist") {
+		t.Errorf("frontendAssetsDir() = %q, want %q", got, filepath.Join("frontend", "dist"))
+	}
+}
+
+func TestFrontendAssetsDir_FallsBackFromBackendModule(t *testing.T) {
+	root := t.TempDir()
+	backendDir := filepath.Join(root, "backend")
+	distDir := filepath.Join(root, "frontend", "dist")
+	if err := os.MkdirAll(backendDir, 0o755); err != nil {
+		t.Fatalf("create backend directory: %v", err)
+	}
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("create frontend dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(distDir, "index.html"), nil, 0o644); err != nil {
+		t.Fatalf("create frontend index: %v", err)
+	}
+	t.Chdir(backendDir)
+
+	if got := frontendAssetsDir(); got != filepath.Join("..", "frontend", "dist") {
+		t.Errorf("frontendAssetsDir() = %q, want %q", got, filepath.Join("..", "frontend", "dist"))
+	}
+}
 
 // TestEnv verifies the env() helper returns the env var when set and
 // the fallback otherwise. Used by run() to read MINTRUD_ADMIN_ADDR

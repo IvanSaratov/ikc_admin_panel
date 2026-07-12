@@ -117,9 +117,17 @@ func frontendConfigFromEnv() app.FrontendConfig {
 	default:
 		return app.FrontendConfig{
 			Mode:   app.FrontendEmbedded,
-			Assets: os.DirFS(filepath.Join("frontend", "dist")),
+			Assets: os.DirFS(frontendAssetsDir()),
 		}
 	}
+}
+
+func frontendAssetsDir() string {
+	fromRepositoryRoot := filepath.Join("frontend", "dist")
+	if _, err := os.Stat(filepath.Join(fromRepositoryRoot, "index.html")); err == nil {
+		return fromRepositoryRoot
+	}
+	return filepath.Join("..", "frontend", "dist")
 }
 
 func env(key string, fallback string) string {
