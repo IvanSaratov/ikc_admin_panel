@@ -1,5 +1,6 @@
 .DS_Store
 .worktrees/
+.superpowers/
 
 # Local databases and generated data
 *.db
