@@ -54,7 +54,7 @@ func run(logger logrus.FieldLogger) error {
 		return err
 	}
 
-	server, err := app.NewServer(addr, database, logger)
+	server, err := app.NewServer(addr, database, logger, frontendConfigFromEnv())
 	if err != nil {
 		return err
 	}
@@ -84,6 +84,18 @@ func newLoggerFromEnv(output io.Writer) (*logrus.Logger, error) {
 		Format: os.Getenv("MINTRUD_ADMIN_LOG_FORMAT"),
 		Output: output,
 	})
+}
+
+func frontendConfigFromEnv() app.FrontendConfig {
+	switch env("MINTRUD_ADMIN_FRONTEND", string(app.FrontendEmbedded)) {
+	case string(app.FrontendDisabled):
+		return app.FrontendConfig{Mode: app.FrontendDisabled}
+	default:
+		return app.FrontendConfig{
+			Mode:   app.FrontendEmbedded,
+			Assets: os.DirFS(filepath.Join("frontend", "dist")),
+		}
+	}
 }
 
 func env(key string, fallback string) string {

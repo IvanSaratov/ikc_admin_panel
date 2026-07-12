@@ -23,7 +23,7 @@ type Server struct {
 // the caller (main.go) doesn't have to repeat env-handling logic. If
 // any of the underlying constructors fails (e.g. bad CSRF key), the
 // error is returned at startup rather than at first-request.
-func NewServer(addr string, database *sql.DB, log logrus.FieldLogger) (*Server, error) {
+func NewServer(addr string, database *sql.DB, log logrus.FieldLogger, frontend FrontendConfig) (*Server, error) {
 	if log == nil {
 		log = logrus.StandardLogger()
 	}
@@ -50,6 +50,7 @@ func NewServer(addr string, database *sql.DB, log logrus.FieldLogger) (*Server, 
 		CSRF:      csrfMW,
 		LoginRate: loginRate,
 		Log:       log,
+		Frontend:  frontend,
 	})
 
 	return &Server{

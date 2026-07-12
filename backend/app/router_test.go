@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
@@ -350,6 +351,42 @@ func TestRequestLoggingMiddlewareWritesSafeFields(t *testing.T) {
 	}
 }
 
+func TestFrontendDisabled_DoesNotServeSPA(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouterWithFrontendMode(t, app.FrontendDisabled)
+
+	req := httptest.NewRequest(http.MethodGet, "/protocols/1/workflow", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "<!doctype html>") {
+		t.Fatalf("disabled frontend served SPA HTML")
+	}
+}
+
+func TestFrontendEmbedded_ServesSPA(t *testing.T) {
+	t.Parallel()
+
+	router, _ := newTestRouterWithFrontend(t, nil, app.FrontendConfig{
+		Mode: app.FrontendEmbedded,
+		Assets: fstest.MapFS{
+			"index.html": {Data: []byte("<!doctype html><title>React</title>")},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protocols/1/workflow", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "<!doctype html>") {
+		t.Fatalf("body does not contain SPA HTML: %s", rec.Body.String())
+	}
+}
+
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	router, _ := newTestRouterWithDB(t)
@@ -365,6 +402,16 @@ func newTestRouterWithDB(t *testing.T) (http.Handler, *sql.DB) {
 }
 
 func newTestRouterWithDBAndLog(t *testing.T, logger logrus.FieldLogger) (http.Handler, *sql.DB) {
+	return newTestRouterWithFrontend(t, logger, app.FrontendConfig{})
+}
+
+func newTestRouterWithFrontendMode(t *testing.T, mode app.FrontendMode) http.Handler {
+	t.Helper()
+	router, _ := newTestRouterWithFrontend(t, nil, app.FrontendConfig{Mode: mode})
+	return router
+}
+
+func newTestRouterWithFrontend(t *testing.T, logger logrus.FieldLogger, frontend app.FrontendConfig) (http.Handler, *sql.DB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -407,6 +454,7 @@ func newTestRouterWithDBAndLog(t *testing.T, logger logrus.FieldLogger) (http.Ha
 		Sessions: sessions,
 		CSRF:     csrfMW,
 		Log:      logger,
+		Frontend: frontend,
 	}), db
 }
 

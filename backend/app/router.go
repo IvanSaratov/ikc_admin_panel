@@ -17,6 +17,7 @@ type Deps struct {
 	CSRF      func(http.Handler) http.Handler
 	LoginRate *admin.RateLimiter
 	Log       logrus.FieldLogger
+	Frontend  FrontendConfig
 }
 
 // NewRouter собирает роутер с общей базой авторизации: Sessions.LoadAndSave,
@@ -39,6 +40,7 @@ func NewRouter(deps Deps) http.Handler {
 	router.Use(deps.CSRF)
 
 	registerRoutes(router, deps, newContainer(deps))
+	registerFrontendRoutes(router, deps.Frontend)
 
 	return router
 }
