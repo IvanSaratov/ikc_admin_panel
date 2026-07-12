@@ -23,6 +23,14 @@
 
 ## Локальный запуск
 
+Прямой `go run` не загружает корневой `.env`, поэтому перед запуском
+задайте обязательные переменные в текущей shell-сессии:
+
+```bash
+export MINTRUD_ADMIN_BOOTSTRAP_PASSWORD='local-dev-only'
+export MINTRUD_ADMIN_PLAINTEXT_CSRF=true
+```
+
 ```bash
 sh tests/run_schema_tests.sh
 go -C backend run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
@@ -43,9 +51,11 @@ context, потому что образ включает и backend, и собр
 `backend/migrations/`. React SPA собирается из `frontend/` через Vite.
 
 По умолчанию приложение слушает `:8080` и создает SQLite DB в
-`data/mintrud-admin.db`.
+`data/mintrud-admin.db` относительно `backend/`, то есть в
+`backend/data/mintrud-admin.db` от корня репозитория.
 
-Переопределение:
+Переопределение (при условии, что обе переменные из `export` выше остаются
+заданы в текущей shell-сессии):
 
 ```bash
 MINTRUD_ADMIN_ADDR=:8090 MINTRUD_ADMIN_DB=/tmp/mintrud-admin.db go -C backend run ./cmd/mintrud-admin
@@ -94,9 +104,10 @@ docker compose down -v # полная очистка SQLite volume
 через `docker compose ps` показывает `healthy` после ~10 секунд.
 
 Multi-stage `Dockerfile`: frontend-builder на `node:24-alpine` собирает React
-SPA, Go builder на `golang:1.26.4-alpine` кэширует зависимости по `backend/go.mod`,
-запускает sqlc внутри вложенного Go-модуля с `backend/sqlc.yaml` и
-`backend/migrations/`, а затем компилирует сервер. Runtime на `alpine:3.20` с
+SPA, Go builder на `golang:1.26.4-alpine` кэширует зависимости по `backend/go.mod`
+и `backend/go.sum`, запускает sqlc внутри вложенного Go-модуля,
+используя `backend/sqlc.yaml` и `backend/migrations/`, и компилирует сервер.
+Runtime на `alpine:3.20` с
 `tini` (PID-1 reaper). Бинарь собирается статически
 (`CGO_ENABLED=0`), поэтому в runtime нет зависимостей кроме libc +
 ca-certificates.
