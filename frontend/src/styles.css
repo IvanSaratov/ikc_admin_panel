@@ -29,3 +29,75 @@ body {
 .app-content {
   padding: 32px;
 }
+
+.workflow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.workflow-header h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.primary-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.stage-card {
+  min-height: 136px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 16px;
+  background: white;
+}
+
+.stage-card h2 {
+  margin: 12px 0 8px;
+  font-size: 18px;
+}
+
+.stage-state {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #475467;
+}
+
+.stage-card-done {
+  border-color: #16a34a;
+}
+
+.stage-card-active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.stage-card-blocked {
+  border-color: #dc2626;
+}
+
+.stage-reason {
+  margin: 0;
+  color: #b42318;
+  font-size: 14px;
+}

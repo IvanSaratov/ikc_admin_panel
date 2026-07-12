@@ -1,3 +1,6 @@
+import { mockProtocolWorkflow } from "../api/mockProtocolWorkflow";
+import { ProtocolWorkflowPage } from "../features/protocol-workflow/ProtocolWorkflowPage";
+
 export function App() {
   return (
     <main className="app-shell">
@@ -8,8 +11,7 @@ export function App() {
         <a href="/workers">Слушатели</a>
       </aside>
       <section className="app-content">
-        <h1>Protocol workflow</h1>
-        <p>React frontend is ready for the first workflow slice.</p>
+        <ProtocolWorkflowPage workflow={mockProtocolWorkflow} />
       </section>
     </main>
   );
