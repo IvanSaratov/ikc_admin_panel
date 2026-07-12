@@ -39,7 +39,9 @@ func NewRouter(deps Deps) http.Handler {
 	router.Use(deps.Sessions.LoadAndSave)
 	router.Use(deps.CSRF)
 
-	registerRoutes(router, deps, newContainer(deps))
+	container := newContainer(deps)
+	registerAPIRoutes(router, deps, container)
+	registerRoutes(router, deps, container)
 	registerFrontendRoutes(router, deps.Frontend)
 
 	return router

@@ -387,6 +387,26 @@ func TestFrontendEmbedded_ServesSPA(t *testing.T) {
 	}
 }
 
+func TestSessionAPI_ReturnsJSON(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouterWithFrontendMode(t, app.FrontendDisabled)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/session", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != `{"authenticated":true}` {
+		t.Fatalf("body = %s", body)
+	}
+}
+
 func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	router, _ := newTestRouterWithDB(t)
