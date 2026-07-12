@@ -21,13 +21,16 @@ type FrontendConfig struct {
 func registerFrontendRoutes(router interface {
 	Handle(pattern string, h http.Handler)
 	Get(pattern string, h http.HandlerFunc)
+	Head(pattern string, h http.HandlerFunc)
 }, cfg FrontendConfig) {
 	if cfg.Mode != FrontendEmbedded || cfg.Assets == nil {
 		return
 	}
 
 	router.Handle("/assets/*", http.FileServer(http.FS(cfg.Assets)))
-	router.Get("/*", spaHandler(cfg.Assets))
+	handler := spaHandler(cfg.Assets)
+	router.Get("/*", handler)
+	router.Head("/*", handler)
 }
 
 func spaHandler(frontend fs.FS) http.HandlerFunc {
@@ -40,18 +43,21 @@ func spaHandler(frontend fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path == "" {
-			writeIndex(w, index)
+			writeIndex(w, r, index)
 			return
 		}
 		if _, err := fs.Stat(frontend, path); err == nil {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
-		writeIndex(w, index)
+		writeIndex(w, r, index)
 	}
 }
 
-func writeIndex(w http.ResponseWriter, index []byte) {
+func writeIndex(w http.ResponseWriter, r *http.Request, index []byte) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Method == http.MethodHead {
+		return
+	}
 	_, _ = w.Write(index)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,7 +21,7 @@ import (
 // newIntegrationStack builds a router that mirrors production:
 //   - scs LoadAndSave (cookie I/O) on every request
 //   - gorilla/csrf on every request
-//   - /login public, everything else authed via admin.RequireAuth
+//   - everything protected goes through admin.RequireAuth
 //
 // One known user "alice" is seeded with password "test-password".
 func newIntegrationStack(t *testing.T) (http.Handler, *scs.SessionManager, *audit.Service) {
@@ -75,10 +74,6 @@ func newIntegrationStack(t *testing.T) (http.Handler, *scs.SessionManager, *audi
 
 	authMW := admin.RequireAuth(sm, nil)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /login", h.GetLogin)
-	mux.HandleFunc("POST /login", h.PostLogin)
-
 	// Wrap mux with auth for /protected routes.
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /protected", func(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +88,9 @@ func newIntegrationStack(t *testing.T) (http.Handler, *scs.SessionManager, *audi
 
 	root := http.NewServeMux()
 	root.Handle("/protected", protectedMux)
-	root.Handle("/login", mux)
+	root.HandleFunc("GET /csrf-token", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(csrf.Token(r)))
+	})
 	root.HandleFunc("GET /logout", h.PostLogout)
 
 	mount := csrfMW(sm.LoadAndSave(root))
@@ -219,25 +216,22 @@ func TestPOST_WithCSRFToken_200(t *testing.T) {
 		t.Fatalf("no session cookie")
 	}
 
-	// GET /login first to get a CSRF cookie + token.
-	getReq := httptest.NewRequest(http.MethodGet, "/login", nil)
+	// GET a test token endpoint first to get a CSRF cookie + token.
+	getReq := httptest.NewRequest(http.MethodGet, "/csrf-token", nil)
 	getReq.AddCookie(sessionCookie)
 	getReq.Host = "example.com"
 	getRec := httptest.NewRecorder()
 	mount.ServeHTTP(getRec, getReq)
 
-	csrfToken := extractFormValue(t, getRec.Body.String(), "csrf_token")
+	csrfToken := strings.TrimSpace(getRec.Body.String())
 
-	// POST /protected with the masked CSRF token in the form body.
+	// POST /protected with the masked CSRF token in the request header.
 	// We must echo back both the session cookie and the CSRF cookie;
-	// gorilla/csrf validates the masked token (form value) against
-	// the unmasked token in the CSRF cookie. url.Values{}.Encode()
-	// percent-encodes the '+' '/' '=' base64 characters so the form
-	// parser preserves them verbatim.
-	formValues := url.Values{}
-	formValues.Set("csrf_token", csrfToken)
-	req := httptest.NewRequest(http.MethodPost, "/protected", strings.NewReader(formValues.Encode()))
+	// gorilla/csrf validates the masked token against the unmasked token
+	// in the CSRF cookie.
+	req := httptest.NewRequest(http.MethodPost, "/protected", strings.NewReader(""))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-CSRF-Token", csrfToken)
 	req.AddCookie(sessionCookie)
 	for _, c := range getRec.Result().Cookies() {
 		if c.Name == "csrf_token" {

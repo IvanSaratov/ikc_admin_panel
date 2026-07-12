@@ -49,8 +49,8 @@ const csrfKeyLength = 32
 // Exposed so handler tests can read the token via the documented header.
 const csrfCookieName = "csrf_token"
 
-// csrfFieldName is the form field name the templ helper injects.
-// Must match csrf.FieldName below.
+// csrfFieldName is the legacy form field name configured on the CSRF
+// middleware. JSON clients use csrfRequestHeader instead.
 const csrfFieldName = "csrf_token"
 
 // csrfRequestHeader is the request header that carries the CSRF token for

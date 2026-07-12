@@ -9,7 +9,7 @@
 //   - normalizer.go: ParsedRow -> NormalizedRow (validation)
 //   - state.go: allowed status transitions for request_rows / items
 //   - service.go (this file): orchestration, transactions, audit
-//   - handler.go + views/*.templ: HTTP / templ layer
+//   - handler.go: upload/download HTTP adapters
 //
 // The Service is the only type that touches storage.WithTx; handler.go
 // calls into Service methods and stays free of SQL.

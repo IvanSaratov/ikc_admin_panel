@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/IvanSaratov/ikc_admin_panel/backend/admin/views"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	"github.com/alexedwards/scs/v2"
 	"github.com/sirupsen/logrus"
@@ -21,8 +20,8 @@ const loginErrorMsg = "Invalid login or password"
 //
 // It is intentionally thin: the heavy lifting is in Service
 // (authentication) and scs.SessionManager (cookie + session data). The
-// handler is responsible for HTTP shape: parse form, render templ form,
-// audit login success/failure, redirect on success.
+// handler is responsible for HTTP shape: parse login requests, audit
+// success/failure, and return the appropriate redirect or JSON response.
 type Handler struct {
 	service  *Service
 	audit    *audit.Service
@@ -43,14 +42,14 @@ func NewHandler(service *Service, auditSvc *audit.Service, sessions *scs.Session
 	}
 }
 
-// LoginHandler handles both GET (render form) and POST (authenticate +
-// start session). It satisfies the frozen plan signature:
+// LoginHandler handles legacy POST form authentication. It satisfies the
+// frozen plan signature:
 //
 //	func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request)
 //
 // by being a thin wrapper that invokes the Handler's method. We cannot
 // put this directly on Service because Service must not import
-// audit/views/net/http dependencies — only authentication logic.
+// audit/net/http dependencies — only authentication logic.
 func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Bridge to the real implementation. We construct a Handler on the fly
 	// here because tests inject richer handlers directly; in production
@@ -60,8 +59,8 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "admin handler not initialized", http.StatusInternalServerError)
 		return
 	}
-	if r.Method == http.MethodGet {
-		h.GetLogin(w, r)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	h.PostLogin(w, r)
@@ -91,23 +90,11 @@ func SetDefaultHandler(h *Handler) {
 // Service because Service's constructor signature is frozen.
 var defaultHandler *Handler
 
-// GetLogin renders the login form. GET /login and the redirect target
-// after a failed authentication both land here.
-func (h *Handler) GetLogin(w http.ResponseWriter, r *http.Request) {
-	next := r.URL.Query().Get("next")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := views.LoginForm(r, next, "").Render(r.Context(), w); err != nil {
-		h.log.WithError(err).Error("render login form")
-		http.Error(w, "render error", http.StatusInternalServerError)
-		return
-	}
-}
-
 // PostLogin authenticates the user, starts a session, audits the
 // outcome, and redirects on success.
 func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderLoginWithError(w, r, "", "Could not parse form")
+		http.Error(w, "parse form", http.StatusBadRequest)
 		return
 	}
 
@@ -133,7 +120,7 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		}); auditErr != nil {
 			h.log.WithError(auditErr).Error("audit login failure")
 		}
-		h.renderLoginWithError(w, r, next, loginErrorMsg)
+		http.Error(w, loginErrorMsg, http.StatusUnauthorized)
 		return
 	}
 
@@ -186,16 +173,6 @@ func (h *Handler) PostLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-
-func (h *Handler) renderLoginWithError(w http.ResponseWriter, r *http.Request, next string, msg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK) // re-render the form, not a 403/500
-	if err := views.LoginForm(r, next, msg).Render(r.Context(), w); err != nil {
-		h.log.WithError(err).Error("render login form (error)")
-		http.Error(w, "render error", http.StatusInternalServerError)
-		return
-	}
 }
 
 func errReason(err error) string {

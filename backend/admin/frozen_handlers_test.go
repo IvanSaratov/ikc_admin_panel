@@ -18,11 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// TestService_LoginHandler_GET covers the frozen-signature Service method
-// (section 0.2 of the Core MVP plan). The bridge in handler.go dispatches
-// to either GetLogin (GET) or PostLogin (POST) on the registered default
-// handler. We exercise both verbs to lock the dispatch behaviour.
-func TestService_LoginHandler_GET(t *testing.T) {
+func TestService_LoginHandler_GET_MethodNotAllowed(t *testing.T) {
 	SetDefaultHandler(newFrozenTestHandler(t))
 	t.Cleanup(func() { SetDefaultHandler(nil) })
 
@@ -30,11 +26,8 @@ func TestService_LoginHandler_GET(t *testing.T) {
 	rec := httptest.NewRecorder()
 	(&Service{}).LoginHandler(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "Sign in") {
-		t.Errorf("GET dispatch did not reach GetLogin (form not rendered): %s", rec.Body.String())
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405; body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -44,14 +37,14 @@ func TestService_LoginHandler_POST(t *testing.T) {
 
 	// Empty form-encoded body. PostLogin parses it, calls
 	// Service.Authenticate("", "") which returns ErrInvalidCredentials,
-	// and re-renders the form with the generic error message.
+	// and returns the generic error message.
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(""))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	(&Service{}).LoginHandler(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (re-render with error)", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "Invalid login or password") {
 		t.Errorf("POST dispatch did not reach PostLogin (no error msg in body): %s", rec.Body.String())

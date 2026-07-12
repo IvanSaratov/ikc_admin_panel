@@ -23,7 +23,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func TestProgramsPageReturnsOperatorShell(t *testing.T) {
+func TestFrontendRouteFallsBackToSPAIndex(t *testing.T) {
 	t.Parallel()
 
 	router := newTestRouter(t)
@@ -34,268 +34,31 @@ func TestProgramsPageReturnsOperatorShell(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Programs") {
-		t.Fatalf("body does not contain Programs: %s", body)
+	if !strings.Contains(body, `<div id="root"></div>`) {
+		t.Fatalf("body does not contain SPA root: %s", body)
 	}
-	if !strings.Contains(body, "Mintrud Admin") {
-		t.Fatalf("body does not contain shell title: %s", body)
+	if !strings.Contains(body, `<script type="module" src="/assets/app.js"></script>`) {
+		t.Fatalf("body does not contain SPA asset entrypoint: %s", body)
 	}
 }
 
-func TestCreateProgramGroupRedirectsAndPersists(t *testing.T) {
+func TestFrontendLoginHeadFallsBackToSPAIndex(t *testing.T) {
 	t.Parallel()
 
 	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
 
-	rec := authedPOST(t, router, "/programs/groups", "code=A&name="+url.QueryEscape("Охрана труда"), cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
+	req := httptest.NewRequest(http.MethodHead, "/login", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-	rec = authedGET(t, router, "/programs", cookies)
-	body := rec.Body.String()
-	if !strings.Contains(body, "Охрана труда") {
-		t.Fatalf("body does not contain created group: %s", body)
-	}
-}
-
-func TestCreateProgramRedirectsAndPersists(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-
-	authedPOST(t, router, "/programs/groups", "code=A&name="+url.QueryEscape("Охрана труда"), cookies)
-
-	rec := authedPOST(t, router, "/programs",
-		"program_group_id=1&code=A-1&name="+url.QueryEscape("Общие вопросы охраны труда")+"&default_hours=40",
-		cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
-
-	rec = authedGET(t, router, "/programs", cookies)
-	body := rec.Body.String()
-	if !strings.Contains(body, "Общие вопросы охраны труда") {
-		t.Fatalf("body does not contain created program: %s", body)
-	}
-}
-
-func TestCreateEmployerRedirectsAndPersists(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-
-	rec := authedPOST(t, router, "/employers", "inn=7700000000&canonical_name="+url.QueryEscape("ООО Ромашка"), cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
-
-	rec = authedGET(t, router, "/employers", cookies)
-	body := rec.Body.String()
-	if !strings.Contains(body, "ООО Ромашка") {
-		t.Fatalf("body does not contain created employer: %s", body)
-	}
-}
-
-func TestCreateWorkerRedirectsAndPersists(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-
-	rec := authedPOST(t, router, "/workers",
-		"last_name="+url.QueryEscape("Петров")+"&first_name="+url.QueryEscape("Петр")+
-			"&snils=123-456-789+00&email=worker@example.test", cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
-
-	rec = authedGET(t, router, "/workers", cookies)
-	body := rec.Body.String()
-	if !strings.Contains(body, "Петров") {
-		t.Fatalf("body does not contain created worker: %s", body)
-	}
-}
-
-func TestAssignEmployerRedirectsAndShowsAssignment(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-
-	authedPOST(t, router, "/employers", "inn=7700000000&canonical_name="+url.QueryEscape("ООО Ромашка"), cookies)
-
-	authedPOST(t, router, "/workers",
-		"last_name="+url.QueryEscape("Петров")+"&first_name="+url.QueryEscape("Петр")+
-			"&snils=123-456-789+00&email=worker@example.test", cookies)
-
-	rec := authedPOST(t, router, "/workers/assignments",
-		"worker_id=1&employer_id=1&current_position="+url.QueryEscape("Инженер"), cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
-
-	rec = authedGET(t, router, "/workers", cookies)
-	body := rec.Body.String()
-	if !strings.Contains(body, "Инженер") || !strings.Contains(body, "ООО Ромашка") {
-		t.Fatalf("body does not contain assignment details: %s", body)
-	}
-}
-
-func TestValidationResponseIncludesFieldMessage(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-
-	rec := authedPOST(t, router, "/employers", "canonical_name="+url.QueryEscape("ООО Без ИНН"), cookies)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Укажите ИНН") {
-		t.Fatalf("body does not contain field validation message: %s", body)
-	}
-}
-
-// seedGroup posts a program group creation form so subsequent tests have
-// something with id=1 to edit/deactivate.
-func seedGroup(t *testing.T, router http.Handler, cookies []*http.Cookie) {
-	t.Helper()
-	authedPOST(t, router, "/programs/groups",
-		"code=A&name="+url.QueryEscape("Охрана труда"), cookies)
-}
-
-func TestEdit_GET_ReturnsForm_200(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-	seedGroup(t, router, cookies)
-
-	rec := authedGET(t, router, "/programs/groups/1/edit", cookies)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+		t.Fatalf("HEAD /login status = %d, want 200", rec.Code)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Edit program group") {
-		t.Errorf("body missing edit heading: %s", body)
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("HEAD /login Content-Type = %q, want text/html", ct)
 	}
-	if !strings.Contains(body, `value="A"`) {
-		t.Errorf("body missing existing code value: %s", body)
-	}
-}
-
-func TestEdit_POST_UpdatesRecord_Redirects(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-	seedGroup(t, router, cookies)
-
-	rec := authedPOST(t, router, "/programs/groups/1/edit",
-		"code=A&name="+url.QueryEscape("Renamed group"), cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
-
-	rec = authedGET(t, router, "/programs", cookies)
-	if !strings.Contains(rec.Body.String(), "Renamed group") {
-		t.Fatalf("updated name not visible: %s", rec.Body.String())
-	}
-}
-
-func TestDeactivate_POST_ChangesStatus_Redirects(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-	seedGroup(t, router, cookies)
-
-	rec := authedPOST(t, router, "/programs/groups/1/deactivate", "", cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", rec.Code)
-	}
-
-	rec = authedGET(t, router, "/programs", cookies)
-	if !strings.Contains(rec.Body.String(), "inactive") {
-		t.Fatalf("status not reflected on list: %s", rec.Body.String())
-	}
-}
-
-func TestDetail_GET_Returns200_WithChildren(t *testing.T) {
-	t.Parallel()
-
-	router := newTestRouter(t)
-	cookies := testLoginPOST(t, router)
-
-	authedPOST(t, router, "/employers", "inn=7700000000&canonical_name="+url.QueryEscape("ООО Ромашка"), cookies)
-	authedPOST(t, router, "/workers",
-		"last_name="+url.QueryEscape("Петров")+"&first_name="+url.QueryEscape("Петр")+
-			"&snils=123-456-789+00&email=worker@example.test", cookies)
-	authedPOST(t, router, "/workers/assignments",
-		"worker_id=1&employer_id=1&current_position="+url.QueryEscape("Инженер"), cookies)
-
-	rec := authedGET(t, router, "/employers/1", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "ООО Ромашка") {
-		t.Errorf("missing employer name on detail: %s", body)
-	}
-	if !strings.Contains(body, "Worker assignments") {
-		t.Errorf("missing assignments section: %s", body)
-	}
-
-	rec = authedGET(t, router, "/workers/1", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("worker detail status = %d, want 200", rec.Code)
-	}
-	body = rec.Body.String()
-	if !strings.Contains(body, "Петров") {
-		t.Errorf("missing worker surname on detail: %s", body)
-	}
-	if !strings.Contains(body, "Инженер") {
-		t.Errorf("missing assignment on detail: %s", body)
-	}
-}
-
-func TestMutation_AlwaysWritesAudit(t *testing.T) {
-	t.Parallel()
-
-	router, database := newTestRouterWithDB(t)
-	cookies := testLoginPOST(t, router)
-
-	authedPOST(t, router, "/employers", "inn=7700000000&canonical_name="+url.QueryEscape("ООО Ромашка"), cookies)
-	authedPOST(t, router, "/employers/1", "inn=7700000000&canonical_name="+url.QueryEscape("ООО Ромашка+"), cookies)
-	authedPOST(t, router, "/employers/1/deactivate", "", cookies)
-
-	rows, err := database.QueryContext(context.Background(), `
-		SELECT action FROM action_log
-		WHERE entity_type = 'employer' AND entity_id = 1
-		ORDER BY id
-	`)
-	if err != nil {
-		t.Fatalf("query action_log: %v", err)
-	}
-	defer rows.Close()
-
-	got := map[string]int{}
-	for rows.Next() {
-		var action string
-		if err := rows.Scan(&action); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		got[action]++
-	}
-	for _, expected := range []string{"create", "update", "deactivate"} {
-		if got[expected] == 0 {
-			t.Errorf("expected audit row for action %q, got %v", expected, got)
-		}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("HEAD /login body length = %d, want 0", rec.Body.Len())
 	}
 }
 
@@ -308,12 +71,12 @@ func TestRequestLoggingMiddlewareWritesSafeFields(t *testing.T) {
 	router, _ := newTestRouterWithDBAndLog(t, logger)
 	cookies := testLoginPOST(t, router)
 
-	rec := authedGET(t, router, "/programs?csrf_token=test-password", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /programs status = %d, want 200", rec.Code)
+	rec := authedGET(t, router, "/protocols/1/download?run=1&csrf_token=test-password", cookies)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /protocols/1/download status = %d, want 404", rec.Code)
 	}
 
-	var programsLog map[string]any
+	var requestLog map[string]any
 	for _, line := range strings.Split(strings.TrimSpace(logBuf.String()), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -322,25 +85,25 @@ func TestRequestLoggingMiddlewareWritesSafeFields(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			t.Fatalf("parse log line %q: %v", line, err)
 		}
-		if entry["method"] == http.MethodGet && entry["path"] == "/programs" {
-			programsLog = entry
+		if entry["method"] == http.MethodGet && entry["path"] == "/protocols/1/download" {
+			requestLog = entry
 			break
 		}
 	}
-	if programsLog == nil {
-		t.Fatalf("GET /programs log entry not found in: %s", logBuf.String())
+	if requestLog == nil {
+		t.Fatalf("GET /protocols/1/download log entry not found in: %s", logBuf.String())
 	}
-	if programsLog["status"] != float64(http.StatusOK) {
-		t.Fatalf("status = %v, want 200", programsLog["status"])
+	if requestLog["status"] != float64(http.StatusNotFound) {
+		t.Fatalf("status = %v, want 404", requestLog["status"])
 	}
-	if programsLog["actor"] != "admin" {
-		t.Fatalf("actor = %v, want admin", programsLog["actor"])
+	if requestLog["actor"] != "admin" {
+		t.Fatalf("actor = %v, want admin", requestLog["actor"])
 	}
-	if _, ok := programsLog["duration_ms"]; !ok {
-		t.Fatalf("duration_ms missing from log: %#v", programsLog)
+	if _, ok := requestLog["duration_ms"]; !ok {
+		t.Fatalf("duration_ms missing from log: %#v", requestLog)
 	}
-	if _, ok := programsLog["remote_ip"]; !ok {
-		t.Fatalf("remote_ip missing from log: %#v", programsLog)
+	if _, ok := requestLog["remote_ip"]; !ok {
+		t.Fatalf("remote_ip missing from log: %#v", requestLog)
 	}
 
 	logs := logBuf.String()
@@ -492,7 +255,13 @@ func newTestRouterWithDB(t *testing.T) (http.Handler, *sql.DB) {
 }
 
 func newTestRouterWithDBAndLog(t *testing.T, logger logrus.FieldLogger) (http.Handler, *sql.DB) {
-	return newTestRouterWithFrontend(t, logger, app.FrontendConfig{})
+	return newTestRouterWithFrontend(t, logger, app.FrontendConfig{
+		Mode: app.FrontendEmbedded,
+		Assets: fstest.MapFS{
+			"index.html":    {Data: []byte(`<!doctype html><html><head><title>IKC Expert Mintrud Admin</title><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>`)},
+			"assets/app.js": {Data: []byte(`console.log("spa test entrypoint");`)},
+		},
+	})
 }
 
 func newTestRouterWithFrontendMode(t *testing.T, mode app.FrontendMode) http.Handler {
@@ -587,71 +356,20 @@ func seedAdminUser(t *testing.T, db *sql.DB) error {
 	return nil
 }
 
-// testLoginPOST performs a real login round-trip and returns the cookies
-// (session + CSRF) that subsequent authenticated requests should reuse.
+// testLoginPOST performs a real JSON login and returns the session cookies
+// that subsequent authenticated requests should reuse.
 func testLoginPOST(t *testing.T, router http.Handler) []*http.Cookie {
 	t.Helper()
 
-	getReq := httptest.NewRequest(http.MethodGet, "/login", nil)
-	getRec := httptest.NewRecorder()
-	router.ServeHTTP(getRec, getReq)
-
-	if getRec.Code != http.StatusOK {
-		t.Fatalf("GET /login status = %d, want 200", getRec.Code)
-	}
-
-	cookies := getRec.Result().Cookies()
-
-	var csrfCookie *http.Cookie
-	for _, c := range cookies {
-		if c.Name == "csrf_token" {
-			csrfCookie = c
-			break
-		}
-	}
-	if csrfCookie == nil {
-		t.Fatalf("no csrf_token cookie in response")
-	}
-
-	body := getRec.Body.String()
-	idx := strings.Index(body, `name="csrf_token"`)
-	if idx < 0 {
-		t.Fatalf("login form has no csrf field: %s", body)
-	}
-	rest := body[idx:]
-	valIdx := strings.Index(rest, `value="`)
-	if valIdx < 0 {
-		t.Fatalf("csrf field has no value: %s", rest)
-	}
-	rest = rest[valIdx+len(`value="`):]
-	endIdx := strings.Index(rest, `"`)
-	if endIdx < 0 {
-		t.Fatalf("csrf value not terminated: %s", rest)
-	}
-	token := rest[:endIdx]
-
-	form := url.Values{}
-	form.Set("login", "admin")
-	form.Set("password", "test-password")
-	form.Set("csrf_token", token)
-
-	postReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
-	postReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	postReq.Header.Set("Referer", "http://example.com/login")
-	postReq.Host = "example.com"
-	for _, c := range cookies {
-		postReq.AddCookie(c)
-	}
-	postReq = csrf.PlaintextHTTPRequest(postReq)
+	postReq := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"login":"admin","password":"test-password"}`))
+	postReq.Header.Set("Content-Type", "application/json")
 	postRec := httptest.NewRecorder()
 	router.ServeHTTP(postRec, postReq)
 
-	if postRec.Code != http.StatusSeeOther {
-		t.Fatalf("POST /login status = %d, want 303; body=%s", postRec.Code, postRec.Body.String())
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/login status = %d, want 200; body=%s", postRec.Code, postRec.Body.String())
 	}
-
-	final := append(cookies, postRec.Result().Cookies()...)
-	return final
+	return postRec.Result().Cookies()
 }
 
 func authedGET(t *testing.T, router http.Handler, path string, cookies []*http.Cookie) *httptest.ResponseRecorder {
@@ -664,103 +382,3 @@ func authedGET(t *testing.T, router http.Handler, path string, cookies []*http.C
 	router.ServeHTTP(rec, req)
 	return rec
 }
-
-func authedPOST(t *testing.T, router http.Handler, path string, body string, cookies []*http.Cookie) *httptest.ResponseRecorder {
-	t.Helper()
-
-	// gorilla/csrf masks the token per-request, so we must GET the page
-	// that contains the form first, parse the masked token out of the
-	// rendered HTML, and then POST with that exact token. The CSRF
-	// cookie itself (set by the middleware) carries the unmasked base
-	// token; the form field carries (OTP XOR base) for that render.
-	pageRec := authedGET(t, router, formReferrerPath(path), cookies)
-	if pageRec.Code != http.StatusOK {
-		t.Fatalf("GET for CSRF page: status %d body %s", pageRec.Code, pageRec.Body.String())
-	}
-	token := extractCSRFToken(t, pageRec.Body.String())
-
-	form := url.Values{}
-	if body != "" {
-		parsed, err := url.ParseQuery(body)
-		if err != nil {
-			t.Fatalf("parse body: %v", err)
-		}
-		for k, vs := range parsed {
-			if k == "csrf_token" {
-				continue
-			}
-			for _, v := range vs {
-				form.Set(k, v)
-			}
-		}
-	}
-	form.Set("csrf_token", token)
-
-	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", "http://example.com"+path)
-	req.Host = "example.com"
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	req = csrf.PlaintextHTTPRequest(req)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	return rec
-}
-
-// formReferrerPath maps a POST target back to the page that renders the
-// form. For list-page POSTs this is the list URL; for per-row POSTs
-// (deactivate / edit) we use the list URL too — same domain.
-func formReferrerPath(path string) string {
-	switch {
-	case path == "/login":
-		return "/login"
-	case path == "/programs/groups":
-		return "/programs"
-	case path == "/programs":
-		return "/programs"
-	case path == "/employers":
-		return "/employers"
-	case path == "/workers":
-		return "/workers"
-	case path == "/workers/assignments":
-		return "/workers"
-	case strings.HasPrefix(path, "/programs/"):
-		// /programs/groups/{id}/edit, /programs/groups/{id}/deactivate,
-		// /programs/{id}/edit, /programs/{id}/deactivate — list page.
-		return "/programs"
-	case strings.HasPrefix(path, "/employers/"):
-		// /employers/{id} (POST is the edit endpoint), deactivate, etc.
-		return "/employers"
-	case strings.HasPrefix(path, "/workers/"):
-		return "/workers"
-	default:
-		return path
-	}
-}
-
-// extractCSRFToken pulls the value attribute out of the hidden
-// <input type="hidden" name="csrf_token" value="..."> field rendered
-// by components.CSRFField.
-func extractCSRFToken(t *testing.T, body string) string {
-	t.Helper()
-	idx := strings.Index(body, `name="csrf_token"`)
-	if idx < 0 {
-		t.Fatalf("body has no csrf_token field: %s", body)
-	}
-	rest := body[idx:]
-	valIdx := strings.Index(rest, `value="`)
-	if valIdx < 0 {
-		t.Fatalf("csrf_token field has no value: %s", rest)
-	}
-	rest = rest[valIdx+len(`value="`):]
-	endIdx := strings.Index(rest, `"`)
-	if endIdx < 0 {
-		t.Fatalf("csrf_token value not terminated: %s", rest)
-	}
-	return rest[:endIdx]
-}
-
-// _ keeps the csrf package referenced when future tests need it directly.
-var _ = csrf.TemplateField

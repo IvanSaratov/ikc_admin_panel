@@ -17,16 +17,13 @@ RUN npm run build
 # builder small; git is required for `go mod download` to fetch modules.
 FROM golang:1.26.4-alpine AS builder
 
-# sqlc and templ versions must match the ones documented in README.md. We install them
-# with `go install` so the binary lands in GOBIN (default $GOPATH/bin)
-# and is on PATH for the subsequent generate steps. The runtime image
-# does not need either tool — the generated sources are baked into the
-# binary.
+# sqlc version must match the one documented in README.md. We install it with
+# `go install` so the binary lands in GOBIN (default $GOPATH/bin) and is on PATH
+# for the subsequent generate step. The runtime image does not need the tool:
+# generated sources are baked into the binary.
 ARG SQLC_VERSION=v1.30.0
-ARG TEMPL_VERSION=v0.3.1020
 RUN apk add --no-cache git ca-certificates \
-    && go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION} \
-    && go install github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}
+    && go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}
 
 WORKDIR /src
 
@@ -35,14 +32,12 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Now copy the rest of the source and run the two code generators before
+# Now copy the rest of the source and run code generation before
 # building. sqlc reads migrations/*.sql + backend/storage/queries/*.sql
-# and writes backend/storage/db/*.go; templ reads *.templ files and
-# writes *_templ.go next to them. Both must be re-run on every build so
-# a stale commit cannot ship out-of-sync generated code.
+# and writes backend/storage/db/*.go. It must be re-run on every build so a
+# stale commit cannot ship out-of-sync generated code.
 COPY . .
 RUN sqlc generate \
-    && templ generate \
     && CGO_ENABLED=0 GOOS=linux go build \
         -ldflags="-s -w" \
         -trimpath \

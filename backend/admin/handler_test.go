@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,7 +16,6 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
-	"github.com/gorilla/csrf"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -68,29 +66,12 @@ func newTestHandlerWithDB(t *testing.T) (*admin.Handler, *scs.SessionManager, *a
 	sm.Cookie.HttpOnly = true
 	sm.Cookie.Path = "/"
 
-	csrfKey := []byte("0123456789abcdef0123456789abcdef")
-	csrfMW := csrf.Protect(csrfKey,
-		csrf.Secure(false),
-		csrf.HttpOnly(true),
-		csrf.FieldName("csrf_token"),
-		csrf.RequestHeader("X-CSRF-Token"),
-		csrf.CookieName("csrf_token"),
-		csrf.Path("/"),
-	)
-
 	auditSvc := audit.NewService(queries)
 	svc := admin.NewService(queries)
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	h := admin.NewHandler(svc, auditSvc, sm, logger)
 	admin.SetDefaultHandler(h)
-
-	// Build a router that mirrors app.NewRouter: scs LoadAndSave globally,
-	// CSRF on legacy HTML login, and JSON auth API outside CSRF.
-	htmlRouter := http.NewServeMux()
-	htmlRouter.HandleFunc("GET /login", h.GetLogin)
-	htmlRouter.HandleFunc("POST /login", h.PostLogin)
-	htmlHandler := csrfMW(htmlRouter)
 
 	apiRouter := http.NewServeMux()
 	apiRouter.HandleFunc("GET /api/session", h.GetSessionJSON)
@@ -102,130 +83,12 @@ func newTestHandlerWithDB(t *testing.T) (*admin.Handler, *scs.SessionManager, *a
 			apiRouter.ServeHTTP(w, r)
 			return
 		}
-		htmlHandler.ServeHTTP(w, r)
+		http.NotFound(w, r)
 	})
 
 	mount := sm.LoadAndSave(router)
 
 	return h, sm, auditSvc, mount, db
-}
-
-func TestLogin_GET_RendersForm(t *testing.T) {
-	t.Parallel()
-
-	_, _, _, mount := newTestHandler(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/login", nil)
-	rec := httptest.NewRecorder()
-	mount.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Sign in") {
-		t.Errorf("body missing 'Sign in': %s", body)
-	}
-	if !strings.Contains(body, `name="csrf_token"`) {
-		t.Errorf("body missing csrf field: %s", body)
-	}
-	if !strings.Contains(body, `name="login"`) {
-		t.Errorf("body missing login field: %s", body)
-	}
-}
-
-func TestLogin_POST_Success_Redirects(t *testing.T) {
-	t.Parallel()
-
-	_, sm, _, mount := newTestHandler(t)
-
-	// Fetch login form to acquire a CSRF token + cookie.
-	getReq := httptest.NewRequest(http.MethodGet, "/login", nil)
-	getRec := httptest.NewRecorder()
-	mount.ServeHTTP(getRec, getReq)
-
-	cookies := getRec.Result().Cookies()
-	body := getRec.Body.String()
-	formToken := extractFormValue(t, body, "csrf_token")
-
-	// POST login. Use url.Values{}.Encode() to percent-encode the
-	// '+', '/', '=' base64 characters in the masked CSRF token so
-	// the form parser preserves them verbatim.
-	formValues := url.Values{}
-	formValues.Set("login", "alice")
-	formValues.Set("password", "test-password")
-	formValues.Set("csrf_token", formToken)
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formValues.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", "http://example.com/login")
-	req.Host = "example.com"
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	req = csrf.PlaintextHTTPRequest(req)
-	rec := httptest.NewRecorder()
-	mount.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want 303; body=%s", rec.Code, rec.Body.String())
-	}
-
-	// Now the session should have user_id; load and check.
-	loadReq := httptest.NewRequest(http.MethodGet, "/_check", nil)
-	var sessionCookieValue string
-	for _, c := range rec.Result().Cookies() {
-		loadReq.AddCookie(c)
-		if c.Name == sm.Cookie.Name {
-			sessionCookieValue = c.Value
-		}
-	}
-	ctx, _ := sm.Load(loadReq.Context(), sessionCookieValue)
-	if sm.GetInt64(ctx, admin.SessionKeyUserID) == 0 {
-		t.Errorf("session has no user_id after login")
-	}
-	if got := sm.GetString(ctx, admin.SessionKeyUserLogin); got != "alice" {
-		t.Errorf("session user_login = %q, want alice", got)
-	}
-}
-
-func TestLogin_POST_InvalidCredentials_RerendersForm(t *testing.T) {
-	t.Parallel()
-
-	_, _, _, mount := newTestHandler(t)
-
-	getReq := httptest.NewRequest(http.MethodGet, "/login", nil)
-	getRec := httptest.NewRecorder()
-	mount.ServeHTTP(getRec, getReq)
-
-	cookies := getRec.Result().Cookies()
-	body := getRec.Body.String()
-	formToken := extractFormValue(t, body, "csrf_token")
-
-	formValues := url.Values{}
-	formValues.Set("login", "alice")
-	formValues.Set("password", "WRONG")
-	formValues.Set("csrf_token", formToken)
-	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(formValues.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", "http://example.com/login")
-	req.Host = "example.com"
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	req = csrf.PlaintextHTTPRequest(req)
-	rec := httptest.NewRecorder()
-	mount.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (re-render)", rec.Code)
-	}
-	body2 := rec.Body.String()
-	if !strings.Contains(body2, "Invalid login or password") {
-		t.Errorf("body missing error msg: %s", body2)
-	}
-	if !strings.Contains(body2, `name="csrf_token"`) {
-		t.Errorf("body missing csrf field on re-render: %s", body2)
-	}
 }
 
 func TestLogout_GET_DestroysSession_Redirects(t *testing.T) {
@@ -287,22 +150,6 @@ func extractCookieValue(t *testing.T, cookies []*http.Cookie, name string) strin
 	}
 	t.Fatalf("no cookie %s", name)
 	return ""
-}
-
-func extractFormValue(t *testing.T, body, name string) string {
-	t.Helper()
-	idx := strings.Index(body, `name="`+name+`"`)
-	if idx < 0 {
-		t.Fatalf("form field %q not in body", name)
-	}
-	rest := body[idx:]
-	valIdx := strings.Index(rest, `value="`)
-	if valIdx < 0 {
-		t.Fatalf("form field %q has no value", name)
-	}
-	rest = rest[valIdx+len(`value="`):]
-	end := strings.Index(rest, `"`)
-	return rest[:end]
 }
 
 func TestIsSafeRedirect(t *testing.T) {

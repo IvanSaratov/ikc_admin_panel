@@ -22,7 +22,7 @@ type Deps struct {
 
 // NewRouter собирает роутер с общей базой авторизации: Sessions.LoadAndSave
 // применяется ко всем запросам, JSON API регистрируется без CSRF, а legacy
-// HTML routes остаются под CSRF до удаления server-rendered UI.
+// POST form endpoints остаются под CSRF для обратной совместимости.
 func NewRouter(deps Deps) http.Handler {
 	if deps.Log == nil {
 		deps.Log = logrus.StandardLogger()

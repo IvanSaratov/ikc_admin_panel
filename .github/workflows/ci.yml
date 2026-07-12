@@ -22,7 +22,6 @@ jobs:
 
       - run: sh tests/run_schema_tests.sh
       - run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
-      - run: go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
       - run: go test ./...
 
       - run: npm ci

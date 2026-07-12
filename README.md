@@ -9,7 +9,7 @@
 
 - SQLite schema и goose migrations;
 - Go server на `net/http` + `chi`;
-- server-rendered UI на `templ`;
+- React SPA, собранный Vite и обслуживаемый Go-сервером;
 - auth baseline: login, sessions, CSRF, bootstrap admin, login rate limit;
 - ручные формы для групп программ, программ, работодателей и слушателей;
 - назначение слушателей работодателям;
@@ -26,13 +26,15 @@
 ```bash
 sh tests/run_schema_tests.sh
 go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
-go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate
 go test ./...
+npm ci --prefix frontend
+npm test --prefix frontend
+npm run build --prefix frontend
 go run ./cmd/mintrud-admin
 ```
 
-Версии sqlc (`v1.30.0`) и templ (`v0.3.1020`) pinned в этих командах и в
-`Dockerfile` — держите их синхронно.
+Версия sqlc (`v1.30.0`) pinned в этой команде и в `Dockerfile` — держите их
+синхронно. React SPA собирается из `frontend/` через Vite.
 
 По умолчанию приложение слушает `:8080` и создает SQLite DB в
 `data/mintrud-admin.db`.
@@ -85,10 +87,11 @@ docker compose down -v # полная очистка SQLite volume
 Данные переживают `docker compose down` (volume сохраняется). Healthcheck
 через `docker compose ps` показывает `healthy` после ~10 секунд.
 
-Multi-stage `Dockerfile`: builder на `golang:1.26.4-alpine` с
-sqlc/templ для перегенерации, runtime на `alpine:3.20` с `tini` (PID-1
-reaper). Бинарь собирается статически (`CGO_ENABLED=0`), поэтому в
-runtime нет зависимостей кроме libc + ca-certificates.
+Multi-stage `Dockerfile`: frontend-builder на `node:24-alpine` собирает React
+SPA, Go builder на `golang:1.26.4-alpine` запускает sqlc и компилирует сервер,
+runtime на `alpine:3.20` с `tini` (PID-1 reaper). Бинарь собирается статически
+(`CGO_ENABLED=0`), поэтому в runtime нет зависимостей кроме libc +
+ca-certificates.
 
 ## Публикация репозитория
 
