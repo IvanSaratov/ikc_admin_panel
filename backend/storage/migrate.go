@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/IvanSaratov/ikc_admin_panel/migrations"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/migrations"
 	"github.com/pressly/goose/v3"
 )
 

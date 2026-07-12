@@ -1,4 +1,4 @@
-module github.com/IvanSaratov/ikc_admin_panel
+module github.com/IvanSaratov/ikc_admin_panel/backend
 
 go 1.26.4
 
