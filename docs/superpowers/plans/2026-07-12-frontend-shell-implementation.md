@@ -1,6 +1,6 @@
 # Frontend Shell Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan stage-by-stage. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the complete mocked React frontend shell for Mintrud Admin, move login into the SPA, and remove all old Go `templ` UI.
 
@@ -12,7 +12,205 @@
 
 ## Scope Check
 
-The approved design covers a broad but single cohesive transition: full frontend shell plus backend UI removal. It is not split into separate specs because the navigation, mocked pages, auth boundary, and old UI cleanup are tightly coupled. Implementation must still be split into small commits so the app stays runnable after each task.
+The approved design covers a broad but single cohesive transition: full frontend shell plus backend UI removal. It is not split into separate specs because the navigation, mocked pages, auth boundary, and old UI cleanup are tightly coupled. Implementation is split into user-reviewed stages. Do not commit individual tasks. Commit only after completing a stage, presenting the result to the user, and receiving explicit approval.
+
+## Stage-Gated Execution Protocol
+
+This plan is executed by stage, not by individual task commit.
+
+Rules for every stage:
+
+1. Start the stage by reading the task list and confirming the stage goal.
+2. Execute the tasks in order with TDD as written.
+3. Keep changes uncommitted while the stage is in progress.
+4. Run the stage verification commands before showing the result.
+5. Show the user:
+   - what changed;
+   - what routes/screens are available;
+   - screenshots or a local URL when the stage has visible UI;
+   - exact verification commands and results;
+   - `git status --short`.
+6. Ask: `Approve Stage N commit?`
+7. If the user requests changes, make them, rerun verification, and show the stage again.
+8. Commit only after explicit approval.
+
+If a stage is too large in practice, stop before expanding scope, explain the split, and ask the user to approve a smaller stage boundary. Do not invent additional commits without approval.
+
+## Stage Breakdown
+
+### Stage 1: Frontend Foundation
+
+Tasks: 1-5.
+
+Goal: install frontend libraries, create route metadata, design tokens, typed mocks, app shell, shared feedback/status/table/drawer components, and stub routes.
+
+Verification before showing:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Show the user:
+
+- `/dashboard` stub shell;
+- collapsible sidebar groups;
+- top bar;
+- route stubs for all planned sections.
+
+Commit after approval:
+
+```bash
+git add frontend/package.json frontend/package-lock.json frontend/src
+git commit -m "feat(frontend): add shell foundation"
+```
+
+### Stage 2: Mocked Application Pages and Motion
+
+Tasks: 6-10.
+
+Goal: replace stubs with mocked dashboard, registries, operations workflow, audit/settings, in-development sections, responsive behavior, and Motion animations.
+
+Verification before showing:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Show the user:
+
+- dashboard;
+- requests/import/protocol mock workflow;
+- registries;
+- audit/settings;
+- in-development sections;
+- animation examples in the real app, not the temporary companion demo.
+
+Commit after approval:
+
+```bash
+git add frontend/src
+git commit -m "feat(frontend): add mocked admin pages"
+```
+
+### Stage 3: Frontend E2E Coverage
+
+Task: 11.
+
+Goal: replace the old Playwright smoke with route coverage and workflow coverage for the full mocked frontend.
+
+Verification before showing:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend run e2e
+```
+
+Show the user:
+
+- Playwright route coverage summary;
+- workflow test summary;
+- any screenshots/traces only if failures occurred.
+
+Commit after approval:
+
+```bash
+git add frontend/tests
+git commit -m "test(frontend): cover shell routes and mock workflow"
+```
+
+### Stage 4: SPA Login and JSON Auth Boundary
+
+Task: 12.
+
+Goal: add backend JSON session/login/logout endpoints and connect the React login route to them.
+
+Verification before showing:
+
+```bash
+go test ./backend/admin ./backend/app
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Show the user:
+
+- `/login` React screen;
+- successful mock/manual login flow if a local backend is running;
+- backend auth API test results.
+
+Commit after approval:
+
+```bash
+git add backend/admin backend/app frontend/src/features/auth frontend/src/api/client.ts frontend/src/app/router.tsx frontend/src/styles/globals.css
+git commit -m "feat: add SPA login and JSON auth API"
+```
+
+### Stage 5: Backend UI Removal and Build Cleanup
+
+Tasks: 13-14.
+
+Goal: remove old `templ` UI, server-rendered protected pages, Tabler/HTMX UI assets, templ generation, and documentation references.
+
+Verification before showing:
+
+```bash
+sh tests/run_schema_tests.sh
+go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
+go test ./...
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Show the user:
+
+- removed backend UI paths;
+- updated CI/Docker/README;
+- confirmation that SPA fallback serves frontend routes;
+- `go.mod` no longer depends on `github.com/a-h/templ`.
+
+Commit after approval:
+
+```bash
+git add backend web go.mod go.sum .github/workflows/ci.yml Dockerfile README.md
+git commit -m "refactor: remove backend-rendered UI"
+```
+
+### Stage 6: Final Public-Git Hygiene and Docker Smoke
+
+Task: 15.
+
+Goal: run the final public-git hygiene audit and Docker compose smoke test.
+
+Verification before showing:
+
+```bash
+git status --short --ignored
+git ls-files -z | xargs -0 rg -l --hidden --no-ignore -i '(password|secret|token|api[_-]?key|private[_-]?key|BEGIN .*PRIVATE KEY|ИНН|СНИЛС|паспорт|email|@)'
+rg -l --hidden --no-ignore -i --glob '!.env' --glob '!.env.*' --glob '!*.db' --glob '!*.sqlite' --glob '!*.sqlite3' '(password|secret|token|api[_-]?key|private[_-]?key|BEGIN .*PRIVATE KEY|ИНН|СНИЛС|паспорт|email|@)' .
+DOCKER_BUILDKIT=1 docker compose up --build -d
+docker compose ps
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8081/login
+docker compose logs --tail=80 app
+docker compose down
+```
+
+Show the user:
+
+- hygiene findings summarized by path/category, never secret values;
+- Docker health status;
+- `/login` HTTP status from `http://localhost:8081/login`.
+
+Commit after approval only if fixes were needed:
+
+```bash
+git add <changed-files>
+git commit -m "chore: finish frontend shell verification"
+```
+
+If no files changed, report that no final commit is needed.
 
 ## File Structure Map
 
@@ -415,12 +613,9 @@ npm --prefix frontend test -- src/app/routes.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add frontend/package.json frontend/package-lock.json frontend/src/app/routes.ts frontend/src/app/routes.test.ts
-git commit -m "feat(frontend): add app route metadata"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 2: Design Tokens and Feedback Components
 
@@ -762,12 +957,9 @@ npm --prefix frontend run build
 
 Expected: both PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add frontend/src/main.tsx frontend/src/styles frontend/src/components/feedback frontend/src/styles.css
-git commit -m "feat(frontend): add design tokens and feedback states"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 3: Mock Domain Model and Services
 
@@ -1265,12 +1457,9 @@ npm --prefix frontend test -- src/api/mock/services.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add frontend/src/api
-git commit -m "feat(frontend): add typed mock services"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 4: Router, Motion Provider, and App Shell
 
@@ -1643,12 +1832,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add frontend/src/app frontend/src/styles/globals.css frontend/src/components/feedback
-git commit -m "feat(frontend): add routed app shell"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 5: Shared Layout, Status, Drawer, and Table Components
 
@@ -2076,12 +2262,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage gate note**
 
-```bash
-git add frontend/src/components frontend/src/styles/globals.css
-git commit -m "feat(frontend): add shared admin UI components"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 6: Dashboard and In-Development Route Pages
 
@@ -2260,12 +2443,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage gate note**
 
-```bash
-git add frontend/src/features/dashboard frontend/src/features/analytics frontend/src/features/users frontend/src/features/notifications frontend/src/app/router.tsx frontend/src/styles/globals.css
-git commit -m "feat(frontend): add dashboard and planned sections"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 7: Registry Pages
 
@@ -2482,12 +2662,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage gate note**
 
-```bash
-git add frontend/src/features/workers frontend/src/features/employers frontend/src/features/programs frontend/src/features/registry frontend/src/app/router.tsx
-git commit -m "feat(frontend): add mocked registry pages"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 8: Operations Pages for Requests, Imports, Protocols, Documents, and Moodle
 
@@ -2637,13 +2814,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Stage gate note**
 
-```bash
-git add frontend/src/features/requests frontend/src/features/imports frontend/src/features/protocols frontend/src/features/documents frontend/src/features/moodle frontend/src/features/operations frontend/src/app/router.tsx
-git rm -f frontend/src/features/protocol-workflow/ProtocolWorkflowPage.tsx frontend/src/features/protocol-workflow/ProtocolWorkflowPage.test.tsx frontend/src/api/mockProtocolWorkflow.ts
-git commit -m "feat(frontend): add mocked operations workflow"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 9: Settings and Audit Pages
 
@@ -2713,12 +2886,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage gate note**
 
-```bash
-git add frontend/src/features/audit frontend/src/features/settings frontend/src/features/control frontend/src/app/router.tsx
-git commit -m "feat(frontend): add audit and settings pages"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 10: Motion and Responsive Polish
 
@@ -2837,12 +3007,9 @@ npm --prefix frontend run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add frontend/src
-git commit -m "feat(frontend): add motion and responsive polish"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 11: Playwright Route and Workflow Coverage
 
@@ -2921,12 +3088,9 @@ npm --prefix frontend run e2e
 
 Expected: PASS in Chromium. If browsers are missing locally, run `npx --prefix frontend playwright install chromium` and rerun.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Stage gate note**
 
-```bash
-git add frontend/tests
-git commit -m "test(frontend): cover app routes and mock workflow"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 12: JSON Auth API and React Login Page
 
@@ -3195,12 +3359,9 @@ npm --prefix frontend test -- src/features/auth/LoginPage.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Stage gate note**
 
-```bash
-git add backend/admin backend/app frontend/src/features/auth frontend/src/api/client.ts frontend/src/app/router.tsx frontend/src/styles/globals.css
-git commit -m "feat: add JSON auth API and React login"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 13: Backend UI Route Removal and SPA Fallback
 
@@ -3284,12 +3445,9 @@ go test ./...
 
 Expected after removing remaining UI references: PASS. During this step, any failure mentioning `backend/*/views`, `backend/ui`, `templ`, `Render(ctx, w)`, or Tabler/HTMX must be resolved by deleting the UI call path or moving the behavior to a JSON handler.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add backend web
-git commit -m "refactor(backend): remove server-rendered UI routes"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 14: Remove templ Build Dependencies and Update Docs
 
@@ -3352,12 +3510,9 @@ npm --prefix frontend run e2e
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Stage gate note**
 
-```bash
-git add go.mod go.sum .github/workflows/ci.yml Dockerfile README.md
-git commit -m "build: remove templ from frontend pipeline"
-```
+Do not commit here. Continue to the next task in the current stage. The stage commit command is defined in the Stage Breakdown and must be run only after user approval.
 
 ## Task 15: Final Public-Git Hygiene and Docker Smoke
 
@@ -3397,16 +3552,9 @@ docker compose down
 
 Expected: app stops and `mintrud_data` volume remains.
 
-- [ ] **Step 4: Final commit if any smoke fixes were needed**
+- [ ] **Step 4: Stage gate note**
 
-If Step 1 or Step 2 required fixes:
-
-```bash
-git add <changed-files>
-git commit -m "chore: finish frontend shell verification"
-```
-
-If no fixes were needed, do not create an empty commit.
+Do not commit here. Show the final hygiene and Docker smoke results to the user. If fixes were needed, the Stage 6 commit command is defined in the Stage Breakdown and must be run only after user approval. If no files changed, report that no final commit is needed.
 
 ## Self-Review Checklist
 
