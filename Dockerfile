@@ -12,7 +12,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Builder ---------------------------------------------------------------
-# Pinned to the same Go version declared in go.mod so the toolchain in the
+# Pinned to the same Go version declared in backend/go.mod so the toolchain in the
 # image cannot drift from what developers use locally. alpine keeps the
 # builder small; git is required for `go mod download` to fetch modules.
 FROM golang:1.26.4-alpine AS builder
@@ -25,18 +25,18 @@ ARG SQLC_VERSION=v1.30.0
 RUN apk add --no-cache git ca-certificates \
     && go install github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}
 
-WORKDIR /src
+WORKDIR /src/backend
 
 # Copy module manifests first and download deps as a separate layer.
 # Subsequent source edits don't bust the module cache.
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 # Now copy the rest of the source and run code generation before
-# building. sqlc reads migrations/*.sql + backend/storage/queries/*.sql
-# and writes backend/storage/db/*.go. It must be re-run on every build so a
+# building. From the backend module, sqlc reads migrations/*.sql plus
+# storage/queries/*.sql and writes storage/db/*.go. It must be re-run on every build so a
 # stale commit cannot ship out-of-sync generated code.
-COPY . .
+COPY . /src
 RUN sqlc generate \
     && CGO_ENABLED=0 GOOS=linux go build \
         -ldflags="-s -w" \

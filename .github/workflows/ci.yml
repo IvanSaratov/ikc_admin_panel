@@ -12,7 +12,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: backend/go.mod
 
       - uses: actions/setup-node@v4
         with:
@@ -22,7 +22,9 @@ jobs:
 
       - run: sh tests/run_schema_tests.sh
       - run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
+        working-directory: backend
       - run: go test ./...
+        working-directory: backend
 
       - run: npm ci
         working-directory: frontend
