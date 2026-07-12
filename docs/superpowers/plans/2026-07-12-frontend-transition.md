@@ -10,6 +10,192 @@
 
 ---
 
+## Execution Stages
+
+Use these stages to run implementation in small, reviewable sessions. Each session must start by reading:
+
+1. `AGENTS.md`
+2. `docs/superpowers/specs/2026-07-12-frontend-transition-design.md`
+3. `docs/superpowers/plans/2026-07-12-frontend-transition.md`
+
+Every stage has a stop point. After completing a stage, stop and report:
+
+- files changed;
+- commands run;
+- pass/fail result;
+- any deviations from the plan;
+- the next recommended stage.
+
+Do not start the next stage until the user approves it.
+
+### Stage 1: Frontend Scaffold
+
+**Scope:** Task 1 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 1: Frontend Scaffold из плана. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gate:**
+
+```bash
+npm --prefix frontend run build
+```
+
+Expected: `frontend/dist/index.html` exists and the command exits `0`.
+
+**Stop point:** React/Vite/TypeScript scaffold exists. No Go application behavior should change in this stage.
+
+### Stage 2: Mock Protocol Workflow UI
+
+**Scope:** Task 2 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 2: Mock Protocol Workflow UI из плана. Сначала убедись, что Stage 1 уже выполнен. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gates:**
+
+```bash
+npm --prefix frontend test -- ProtocolWorkflowPage.test.tsx
+npm --prefix frontend run build
+```
+
+Expected: component test and build pass.
+
+**Stop point:** The protocol workflow screen renders from mock data and has component coverage. It does not need real backend data yet.
+
+### Stage 3: Go Frontend Serving Mode
+
+**Scope:** Task 3 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 3: Go Frontend Serving Mode из плана. Сначала убедись, что Stage 1 выполнен и есть frontend/dist. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gate:**
+
+```bash
+go test ./...
+```
+
+Expected: all Go tests pass. Go supports `MINTRUD_ADMIN_FRONTEND=embedded|disabled`.
+
+**Stop point:** One Go binary can be configured as API-only for Vite development or embedded frontend server for production-like runs.
+
+### Stage 4: Initial JSON API
+
+**Scope:** Task 4 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 4: Initial JSON API из плана. Сначала убедись, что Stage 3 выполнен. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gate:**
+
+```bash
+go test ./...
+```
+
+Expected: all Go tests pass and initial `/api/*` route contract exists.
+
+**Stop point:** Backend has the first API contract. Frontend can still use mocks until Stage 5.
+
+### Stage 5: Wire Frontend to API
+
+**Scope:** Task 5 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 5: Wire Frontend to API из плана. Сначала убедись, что Stage 4 выполнен. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gates:**
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Expected: frontend tests and build pass with API client, loading state, and retained mock-first development path.
+
+**Stop point:** The first screen can be connected to `/api` without removing mock-driven UI development.
+
+### Stage 6: Playwright Smoke
+
+**Scope:** Task 6 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 6: Playwright Smoke из плана. Сначала убедись, что Stage 5 выполнен. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gate:**
+
+```bash
+npm --prefix frontend run e2e
+```
+
+Expected: Chromium Playwright smoke test passes against the local frontend server.
+
+**Stop point:** There is a minimal browser-level regression test for the workflow screen. Do not add broad e2e coverage in this stage.
+
+### Stage 7: Docker Production Build
+
+**Scope:** Task 7 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 7: Docker Production Build из плана. Сначала убедись, что Stage 6 выполнен. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gates:**
+
+```bash
+DOCKER_BUILDKIT=1 docker compose build app
+DOCKER_BUILDKIT=1 docker compose up --build -d
+docker compose ps
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8081/login
+```
+
+Expected: image builds, app starts, compose reports a healthy service, and `/login` returns `200` or `302`.
+
+**Stop point:** Docker build includes frontend assets without adding a Node runtime to the customer-facing service.
+
+### Stage 8: CI
+
+**Scope:** Task 8 only.
+
+**Start command for a fresh session:**
+
+```text
+Продолжи работу в /Users/ione/src/ikc_expert_admin_panel. Прочитай AGENTS.md, затем docs/superpowers/specs/2026-07-12-frontend-transition-design.md и docs/superpowers/plans/2026-07-12-frontend-transition.md. Выполни только Stage 8: CI из плана. Сначала убедись, что Stage 7 выполнен. После завершения остановись для моей проверки. Не трогай .env и не печатай секреты.
+```
+
+**Validation gates:**
+
+```bash
+go test ./...
+npm --prefix frontend test
+npm --prefix frontend run build
+npm --prefix frontend run e2e
+```
+
+Expected: local checks match the CI jobs before pushing.
+
+**Stop point:** GitHub Actions validates the Go and frontend checks. Do not add release/MSI automation in this stage.
+
 ## File Structure
 
 - Create `frontend/package.json`: frontend scripts and dependencies.
