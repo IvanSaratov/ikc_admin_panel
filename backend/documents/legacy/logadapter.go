@@ -1,9 +1,9 @@
 package legacy
 
-import "github.com/sirupsen/logrus"
+import "go.uber.org/zap"
 
 // FieldLogger — минимальная поверхность logger, которую использует legacy
-// generator. Она совпадает с нужной частью logrus и не даёт legacy-коду
+// generator. Она совпадает с нужной частью zap.SugaredLogger и не даёт legacy-коду
 // диктовать остальную logging-архитектуру приложения.
 type FieldLogger interface {
 	Infof(format string, args ...any)
@@ -16,32 +16,32 @@ type FieldLogger interface {
 	Error(args ...any)
 }
 
-type logrusAdapter struct {
-	log logrus.FieldLogger
+type zapAdapter struct {
+	log *zap.SugaredLogger
 }
 
-func newLogrusAdapter(log logrus.FieldLogger) FieldLogger {
+func newZapAdapter(log *zap.Logger) FieldLogger {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
-	return &logrusAdapter{log: log}
+	return &zapAdapter{log: log.Sugar()}
 }
 
-// NewLogrusAdapter возвращает logger для legacy generator.
-func NewLogrusAdapter() FieldLogger {
-	return newLogrusAdapter(nil)
+// NewZapAdapter возвращает logger для legacy generator.
+func NewZapAdapter() FieldLogger {
+	return newZapAdapter(nil)
 }
 
-// NewLogrusAdapterWithLogger подключает legacy generator к runtime logger приложения.
-func NewLogrusAdapterWithLogger(log logrus.FieldLogger) FieldLogger {
-	return newLogrusAdapter(log)
+// NewZapAdapterWithLogger подключает legacy generator к runtime logger приложения.
+func NewZapAdapterWithLogger(log *zap.Logger) FieldLogger {
+	return newZapAdapter(log)
 }
 
-func (a *logrusAdapter) Infof(format string, args ...any)  { a.log.Infof(format, args...) }
-func (a *logrusAdapter) Debugf(format string, args ...any) { a.log.Debugf(format, args...) }
-func (a *logrusAdapter) Warnf(format string, args ...any)  { a.log.Warnf(format, args...) }
-func (a *logrusAdapter) Errorf(format string, args ...any) { a.log.Errorf(format, args...) }
-func (a *logrusAdapter) Info(args ...any)                  { a.log.Info(args...) }
-func (a *logrusAdapter) Debug(args ...any)                 { a.log.Debug(args...) }
-func (a *logrusAdapter) Warn(args ...any)                  { a.log.Warn(args...) }
-func (a *logrusAdapter) Error(args ...any)                 { a.log.Error(args...) }
+func (a *zapAdapter) Infof(format string, args ...any)  { a.log.Infof(format, args...) }
+func (a *zapAdapter) Debugf(format string, args ...any) { a.log.Debugf(format, args...) }
+func (a *zapAdapter) Warnf(format string, args ...any)  { a.log.Warnf(format, args...) }
+func (a *zapAdapter) Errorf(format string, args ...any) { a.log.Errorf(format, args...) }
+func (a *zapAdapter) Info(args ...any)                  { a.log.Info(args...) }
+func (a *zapAdapter) Debug(args ...any)                 { a.log.Debug(args...) }
+func (a *zapAdapter) Warn(args ...any)                  { a.log.Warn(args...) }
+func (a *zapAdapter) Error(args ...any)                 { a.log.Error(args...) }

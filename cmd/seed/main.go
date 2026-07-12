@@ -25,30 +25,46 @@ import (
 	"strings"
 	"time"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/platform/logging"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // now is the canonical "seed moment" — all created_at / updated_at
 // values are anchored here so the seeded timeline reads coherently.
 var now = time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
 
+var seedLog = zap.NewNop().Sugar()
+
 func main() {
+	logger, err := logging.New(logging.Config{
+		Env:    os.Getenv("MINTRUD_ADMIN_ENV"),
+		Level:  os.Getenv("MINTRUD_ADMIN_LOG_LEVEL"),
+		Format: os.Getenv("MINTRUD_ADMIN_LOG_FORMAT"),
+		Output: os.Stdout,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FATAL: invalid log configuration")
+		os.Exit(1)
+	}
+	defer func() { _ = logger.Sync() }()
+	seedLog = logger.Sugar()
+
 	if len(os.Args) < 2 {
-		log.Fatalf("usage: %s <db-path>", os.Args[0])
+		seedLog.Fatalf("usage: %s <db-path>", os.Args[0])
 	}
 	ctx := context.Background()
 	db, err := storage.Open(ctx, os.Args[1])
 	if err != nil {
-		log.Fatalf("open db: %v", err)
+		seedLog.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
 	fx := buildFixture()
 	if err := apply(ctx, db, fx); err != nil {
-		log.Fatalf("seed: %v", err)
+		seedLog.Fatalf("seed: %v", err)
 	}
-	log.Printf("seed: complete (%d program_groups, %d programs, %d employers, %d workers, %d requests, %d protocols, %d action_log entries)",
+	seedLog.Infof("seed: complete (%d program_groups, %d programs, %d employers, %d workers, %d requests, %d protocols, %d action_log entries)",
 		len(fx.programGroups), len(fx.programs), len(fx.employers),
 		len(fx.workers), len(fx.requests), len(fx.protocols), len(fx.actionLog))
 }
@@ -394,9 +410,9 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			VALUES (?, ?, 'active', ?, ?)`,
 			g.code, g.name, ts(ago(720*time.Hour)), ts(ago(720*time.Hour)))
 		ids.programGroup[g.code] = id
-		log.Printf("seed: program_group %s -> %d", g.code, id)
+		seedLog.Infof("seed: program_group %s -> %d", g.code, id)
 		if i == len(fx.programGroups)-1 {
-			log.Printf("seed: program_groups -> %d rows", len(fx.programGroups))
+			seedLog.Infof("seed: program_groups -> %d rows", len(fx.programGroups))
 		}
 	}
 
@@ -409,7 +425,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			ts(ago(720*time.Hour)), ts(ago(720*time.Hour)))
 		ids.program[p.code] = id
 	}
-	log.Printf("seed: programs -> %d rows", len(fx.programs))
+	seedLog.Infof("seed: programs -> %d rows", len(fx.programs))
 
 	for i, e := range fx.employers {
 		status := "active"
@@ -424,7 +440,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			ts(ago(360*time.Hour)), ts(ago(48*time.Hour)))
 		ids.employer[key] = id
 	}
-	log.Printf("seed: employers -> %d rows (1 inactive edge case)", len(fx.employers))
+	seedLog.Infof("seed: employers -> %d rows (1 inactive edge case)", len(fx.employers))
 
 	for i, w := range fx.workers {
 		key := fmt.Sprintf("w%d", i)
@@ -444,7 +460,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			ts(ago(300*time.Hour)), ts(ago(96*time.Hour)))
 		ids.we[key] = weID
 	}
-	log.Printf("seed: workers -> %d rows; worker_employers -> %d rows",
+	seedLog.Infof("seed: workers -> %d rows; worker_employers -> %d rows",
 		len(fx.workers), len(fx.workers))
 
 	for i, im := range fx.imports {
@@ -460,7 +476,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			ts(im.received), ts(im.received.Add(time.Hour)))
 		ids.imp[key] = id
 	}
-	log.Printf("seed: imports -> %d rows (1 failed edge case)", len(fx.imports))
+	seedLog.Infof("seed: imports -> %d rows (1 failed edge case)", len(fx.imports))
 
 	// requests, request_rows, request_training_items, training_records — interleaved
 	// because we need request_row IDs to build training_items, and training_record
@@ -516,8 +532,8 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			}
 		}
 	}
-	log.Printf("seed: client_requests -> %d rows", len(fx.requests))
-	log.Printf("seed: request_training_items -> %d rows; training_records -> %d rows",
+	seedLog.Infof("seed: client_requests -> %d rows", len(fx.requests))
+	seedLog.Infof("seed: request_training_items -> %d rows; training_records -> %d rows",
 		trainingCount, trainingCount)
 
 	for pi, p := range fx.protocols {
@@ -553,7 +569,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			ts(ago(60*24*time.Hour)), ts(ago(2*24*time.Hour)))
 		ids.protocol[pkey] = id
 	}
-	log.Printf("seed: protocols -> %d rows (1 completed, 1 draft)", len(fx.protocols))
+	seedLog.Infof("seed: protocols -> %d rows (1 completed, 1 draft)", len(fx.protocols))
 
 	// Attach first 4 training records to the completed protocol
 	completedID := ids.protocol["p0"]
@@ -571,7 +587,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			confirmedAt,
 			ts(ago(30*24*time.Hour)), ts(ago(30*24*time.Hour)))
 	}
-	log.Printf("seed: protocol_participants -> 4 rows")
+	seedLog.Infof("seed: protocol_participants -> 4 rows")
 
 	for _, gr := range fx.genRuns {
 		mustExec(ctx, tx, `
@@ -582,7 +598,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			nullStr(gr.file), nullStr(gr.errMsg),
 			ts(gr.generated), ts(gr.generated))
 	}
-	log.Printf("seed: generation_runs -> %d rows", len(fx.genRuns))
+	seedLog.Infof("seed: generation_runs -> %d rows", len(fx.genRuns))
 
 	for _, a := range fx.actionLog {
 		var entityID sql.NullInt64
@@ -605,7 +621,7 @@ func apply(ctx context.Context, db *sql.DB, fx *fixture) error {
 			VALUES (?, ?, ?, ?, ?, ?)`,
 			a.actor, a.action, a.entityType, entityID, nullStr(a.details), ts(a.at))
 	}
-	log.Printf("seed: action_log -> %d rows", len(fx.actionLog))
+	seedLog.Infof("seed: action_log -> %d rows", len(fx.actionLog))
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -633,7 +649,7 @@ func insertRequestRow(ctx context.Context, tx *sql.Tx, reqID int64, rowNum int, 
 			}
 		}
 		if w == nil {
-			log.Fatalf("request_row: unknown workerKey %q", rs.workerKey)
+			seedLog.Fatalf("request_row: unknown workerKey %q", rs.workerKey)
 		}
 		rawFullName = sql.NullString{String: w.last + " " + w.first + " " + w.middle, Valid: true}
 		parsedLast = sql.NullString{String: w.last, Valid: true}
@@ -696,7 +712,7 @@ func nullStr(s string) sql.NullString {
 func mustExec(ctx context.Context, tx *sql.Tx, query string, args ...any) int64 {
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		log.Fatalf("exec %q: %v\nargs: %#v", query, err, args)
+		seedLog.Fatalf("exec %q: %v\nargs: %#v", query, err, args)
 	}
 	id, _ := res.LastInsertId()
 	return id

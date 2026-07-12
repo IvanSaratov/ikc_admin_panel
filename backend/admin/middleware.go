@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // SessionKeyUserID is the scs session key under which we store the
@@ -66,9 +66,9 @@ func UserLoginFromContext(ctx context.Context) string {
 // audit attribution. A disabled-user check belongs at login time
 // (Service.Authenticate) — a session issued to an active user remains
 // valid for its TTL.
-func RequireAuth(sm *scs.SessionManager, log logrus.FieldLogger) func(http.Handler) http.Handler {
+func RequireAuth(sm *scs.SessionManager, log *zap.Logger) func(http.Handler) http.Handler {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -3,7 +3,6 @@ package admin_test
 import (
 	"context"
 	"database/sql"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -16,7 +15,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -68,9 +67,7 @@ func newTestHandlerWithDB(t *testing.T) (*admin.Handler, *scs.SessionManager, *a
 
 	auditSvc := audit.NewService(queries)
 	svc := admin.NewService(queries)
-	logger := logrus.New()
-	logger.SetOutput(io.Discard)
-	h := admin.NewHandler(svc, auditSvc, sm, logger)
+	h := admin.NewHandler(svc, auditSvc, sm, zap.NewNop())
 	admin.SetDefaultHandler(h)
 
 	apiRouter := http.NewServeMux()

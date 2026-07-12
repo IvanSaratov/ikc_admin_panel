@@ -5,16 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-func TestNewLogrusAdapterWithLoggerUsesProvidedLogger(t *testing.T) {
+func TestNewZapAdapterWithLoggerUsesProvidedLogger(t *testing.T) {
 	var out bytes.Buffer
-	logger := logrus.New()
-	logger.SetOutput(&out)
-	logger.SetFormatter(&logrus.JSONFormatter{})
+	logger := zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(&out),
+		zapcore.DebugLevel,
+	))
 
-	adapter := NewLogrusAdapterWithLogger(logger)
+	adapter := NewZapAdapterWithLogger(logger)
 	adapter.Warn("legacy-docx-warning")
 
 	if !strings.Contains(out.String(), "legacy-docx-warning") {

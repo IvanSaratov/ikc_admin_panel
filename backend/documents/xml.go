@@ -9,6 +9,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/documents/legacy"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"go.uber.org/zap"
 )
 
 // GenerateXML produces the Mintrud registry XML for a fixed protocol and
@@ -71,7 +72,10 @@ func generateXMLImpl(ctx context.Context, svc *Service, q *storagedb.Queries, pr
 		// Bytes were produced successfully; the run is missing only as a
 		// bookkeeping failure. Return the bytes anyway with a nil pointer
 		// and the storage error so the operator gets a usable download.
-		svc.log.WithField("protocol_id", protocolID).WithError(err).Error("insert generation_runs row after xml success")
+		svc.log.Error("insert generation_runs row after xml success",
+			zap.Int64("protocol_id", protocolID),
+			zap.Error(err),
+		)
 		return raw, nil, nil
 	}
 	svc.recordAudit(ctx, "documents.generate.completed", protocolID, map[string]any{

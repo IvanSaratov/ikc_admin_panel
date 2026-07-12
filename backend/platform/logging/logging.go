@@ -6,7 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Config описывает runtime-настройки logger. Пустые значения безопасны:
@@ -18,13 +19,13 @@ type Config struct {
 	Output io.Writer
 }
 
-// New создаёт изолированный logrus.Logger для приложения.
-func New(cfg Config) (*logrus.Logger, error) {
+// New создаёт изолированный zap.Logger для приложения.
+func New(cfg Config) (*zap.Logger, error) {
 	level, err := parseLevel(cfg.Level)
 	if err != nil {
 		return nil, err
 	}
-	formatter, err := formatter(cfg.Env, cfg.Format)
+	format, err := resolveFormat(cfg.Env, cfg.Format)
 	if err != nil {
 		return nil, err
 	}
@@ -33,25 +34,37 @@ func New(cfg Config) (*logrus.Logger, error) {
 		out = os.Stdout
 	}
 
-	logger := logrus.New()
-	logger.SetOutput(out)
-	logger.SetLevel(level)
-	logger.SetFormatter(formatter)
-	return logger, nil
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeDuration = zapcore.MillisDurationEncoder
+
+	var encoder zapcore.Encoder
+	switch format {
+	case "json":
+		encoder = zapcore.NewJSONEncoder(encoderCfg)
+	case "text":
+		encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
+		encoder = zapcore.NewConsoleEncoder(encoderCfg)
+	default:
+		return nil, fmt.Errorf("unsupported log format %q", format)
+	}
+
+	core := zapcore.NewCore(encoder, zapcore.AddSync(out), level)
+	return zap.New(core), nil
 }
 
-func parseLevel(raw string) (logrus.Level, error) {
+func parseLevel(raw string) (zapcore.Level, error) {
 	if strings.TrimSpace(raw) == "" {
-		return logrus.InfoLevel, nil
+		return zapcore.InfoLevel, nil
 	}
-	level, err := logrus.ParseLevel(strings.ToLower(strings.TrimSpace(raw)))
-	if err != nil {
-		return logrus.InfoLevel, fmt.Errorf("parse log level %q: %w", raw, err)
+	var level zapcore.Level
+	if err := level.Set(strings.ToLower(strings.TrimSpace(raw))); err != nil {
+		return zapcore.InfoLevel, fmt.Errorf("parse log level %q: %w", raw, err)
 	}
 	return level, nil
 }
 
-func formatter(env string, format string) (logrus.Formatter, error) {
+func resolveFormat(env string, format string) (string, error) {
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format == "" {
 		switch strings.ToLower(strings.TrimSpace(env)) {
@@ -63,14 +76,9 @@ func formatter(env string, format string) (logrus.Formatter, error) {
 	}
 
 	switch format {
-	case "json":
-		return &logrus.JSONFormatter{}, nil
-	case "text":
-		return &logrus.TextFormatter{
-			DisableColors: true,
-			FullTimestamp: true,
-		}, nil
+	case "json", "text":
+		return format, nil
 	default:
-		return nil, fmt.Errorf("unsupported log format %q", format)
+		return "", fmt.Errorf("unsupported log format %q", format)
 	}
 }

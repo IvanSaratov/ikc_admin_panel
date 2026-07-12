@@ -9,7 +9,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	"github.com/alexedwards/scs/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // loginErrorMsg is intentionally generic so we never leak whether the
@@ -26,13 +26,13 @@ type Handler struct {
 	service  *Service
 	audit    *audit.Service
 	sessions *scs.SessionManager
-	log      logrus.FieldLogger
+	log      *zap.Logger
 }
 
 // NewHandler constructs a Handler.
-func NewHandler(service *Service, auditSvc *audit.Service, sessions *scs.SessionManager, log logrus.FieldLogger) *Handler {
+func NewHandler(service *Service, auditSvc *audit.Service, sessions *scs.SessionManager, log *zap.Logger) *Handler {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 	return &Handler{
 		service:  service,
@@ -118,7 +118,7 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 			Actor:      actor,
 			Details:    map[string]any{"reason": errReason(err)},
 		}); auditErr != nil {
-			h.log.WithError(auditErr).Error("audit login failure")
+			h.log.Error("audit login failure", zap.Error(auditErr))
 		}
 		http.Error(w, loginErrorMsg, http.StatusUnauthorized)
 		return
@@ -127,7 +127,7 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 	// Successful authentication: rotate the session ID before storing
 	// any user-derived data so a pre-login fixation cannot survive login.
 	if err := h.sessions.RenewToken(r.Context()); err != nil {
-		h.log.WithError(err).Error("renew session token")
+		h.log.Error("renew session token", zap.Error(err))
 		http.Error(w, "session error", http.StatusInternalServerError)
 		return
 	}
@@ -141,7 +141,7 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		Actor:      user.Login,
 		EntityID:   sql.NullInt64{Int64: user.ID, Valid: true},
 	}); auditErr != nil {
-		h.log.WithError(auditErr).Error("audit login success")
+		h.log.Error("audit login success", zap.Error(auditErr))
 	}
 
 	redirect := next
@@ -158,7 +158,7 @@ func (h *Handler) PostLogout(w http.ResponseWriter, r *http.Request) {
 	login := h.sessions.GetString(r.Context(), SessionKeyUserLogin)
 
 	if err := h.sessions.Destroy(r.Context()); err != nil {
-		h.log.WithError(err).Error("destroy session")
+		h.log.Error("destroy session", zap.Error(err))
 	}
 
 	if login != "" {
@@ -168,7 +168,7 @@ func (h *Handler) PostLogout(w http.ResponseWriter, r *http.Request) {
 			EntityType: "session",
 			Actor:      login,
 		}); auditErr != nil {
-			h.log.WithError(auditErr).Error("audit logout")
+			h.log.Error("audit logout", zap.Error(auditErr))
 		}
 	}
 

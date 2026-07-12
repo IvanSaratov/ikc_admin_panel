@@ -11,8 +11,8 @@ require (
 	github.com/lukasjarosch/go-docx v0.5.0
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/shabbyrobe/xmlwriter v0.0.0-20251128030032-2fcb52763289
-	github.com/sirupsen/logrus v1.9.3
 	github.com/xuri/excelize/v2 v2.10.1
+	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.53.0
 	modernc.org/sqlite v1.51.0
 )

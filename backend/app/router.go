@@ -7,7 +7,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // Deps собирает зависимости времени выполнения для авторизации, CSRF и логов.
@@ -16,7 +16,7 @@ type Deps struct {
 	Sessions  *scs.SessionManager
 	CSRF      func(http.Handler) http.Handler
 	LoginRate *admin.RateLimiter
-	Log       logrus.FieldLogger
+	Log       *zap.Logger
 	Frontend  FrontendConfig
 }
 
@@ -25,7 +25,7 @@ type Deps struct {
 // POST form endpoints остаются под CSRF для обратной совместимости.
 func NewRouter(deps Deps) http.Handler {
 	if deps.Log == nil {
-		deps.Log = logrus.StandardLogger()
+		deps.Log = zap.NewNop()
 	}
 	if deps.Sessions == nil {
 		// Тесты, которым не важны сессии, могут передать Deps без Sessions.

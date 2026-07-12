@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/csrf"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // EnvCSRFKey is the env var that supplies the CSRF authKey.
@@ -59,14 +59,14 @@ const csrfRequestHeader = "X-CSRF-Token"
 
 // LoadCSRF сохраняет прежний публичный контракт и использует стандартный logger.
 func LoadCSRF() (func(http.Handler) http.Handler, error) {
-	return LoadCSRFWithLogger(logrus.StandardLogger())
+	return LoadCSRFWithLogger(zap.L())
 }
 
 // LoadCSRFWithLogger собирает CSRF middleware из env-настроек и пишет
 // предупреждения через переданный runtime logger без значений секретов.
-func LoadCSRFWithLogger(log logrus.FieldLogger) (func(http.Handler) http.Handler, error) {
+func LoadCSRFWithLogger(log *zap.Logger) (func(http.Handler) http.Handler, error) {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 
 	key, err := resolveCSRFKeyWithLogger(log)
@@ -137,10 +137,13 @@ func splitCSV(s string) []string {
 }
 
 func resolveCSRFKey() ([]byte, error) {
-	return resolveCSRFKeyWithLogger(logrus.StandardLogger())
+	return resolveCSRFKeyWithLogger(zap.L())
 }
 
-func resolveCSRFKeyWithLogger(log logrus.FieldLogger) ([]byte, error) {
+func resolveCSRFKeyWithLogger(log *zap.Logger) ([]byte, error) {
+	if log == nil {
+		log = zap.NewNop()
+	}
 	if raw := os.Getenv(EnvCSRFKey); raw != "" {
 		// Prefer hex decoding; fall back to raw bytes if not valid hex.
 		if decoded, err := hex.DecodeString(raw); err == nil {

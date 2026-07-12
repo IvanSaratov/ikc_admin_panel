@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,7 +13,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -149,7 +148,5 @@ func newFrozenTestHandler(t *testing.T) *Handler {
 
 	auditSvc := audit.NewService(queries)
 	svc := NewService(queries)
-	logger := logrus.New()
-	logger.SetOutput(io.Discard)
-	return NewHandler(svc, auditSvc, sm, logger)
+	return NewHandler(svc, auditSvc, sm, zap.NewNop())
 }

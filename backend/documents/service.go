@@ -19,7 +19,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // ErrInvalidType is returned when callers ask for ?type=other than xml/docx.
@@ -38,16 +38,16 @@ type Service struct {
 	db      *sql.DB
 	queries *storagedb.Queries
 	audit   *audit.Service
-	log     logrus.FieldLogger
+	log     *zap.Logger
 	now     func() time.Time
 }
 
 // NewService wires the dependencies. audit and log are optional (nil
 // allowed for tests); the service still records generation_runs in
 // either case because that table is the source of truth for downloads.
-func NewService(db *sql.DB, queries *storagedb.Queries, auditSvc *audit.Service, log logrus.FieldLogger) *Service {
+func NewService(db *sql.DB, queries *storagedb.Queries, auditSvc *audit.Service, log *zap.Logger) *Service {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 	return &Service{
 		db:      db,
@@ -91,10 +91,11 @@ func (s *Service) recordGenerationRun(ctx context.Context, protocolID int64, doc
 		CreatedAt:    s.timestamp(),
 	})
 	if err != nil {
-		s.log.WithFields(logrus.Fields{
-			"protocol_id": protocolID,
-			"type":        docType,
-		}).WithError(err).Error("create generation_runs row")
+		s.log.Error("create generation_runs row",
+			zap.Int64("protocol_id", protocolID),
+			zap.String("type", docType),
+			zap.Error(err),
+		)
 		return storagedb.GenerationRun{}, fmt.Errorf("insert generation_run: %w", err)
 	}
 	return row, nil

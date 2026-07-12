@@ -7,7 +7,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 type statusRecorder struct {
@@ -41,9 +41,9 @@ func (r *statusRecorder) statusCode() int {
 	return r.status
 }
 
-func requestLogger(log logrus.FieldLogger) func(http.Handler) http.Handler {
+func requestLogger(log *zap.Logger) func(http.Handler) http.Handler {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,17 +52,17 @@ func requestLogger(log logrus.FieldLogger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(rec, r)
 
-			fields := logrus.Fields{
-				"method":      r.Method,
-				"path":        requestPath(r),
-				"status":      rec.statusCode(),
-				"duration_ms": time.Since(start).Milliseconds(),
-				"remote_ip":   remoteIP(r),
+			fields := []zap.Field{
+				zap.String("method", r.Method),
+				zap.String("path", requestPath(r)),
+				zap.Int("status", rec.statusCode()),
+				zap.Int64("duration_ms", time.Since(start).Milliseconds()),
+				zap.String("remote_ip", remoteIP(r)),
 			}
 			if actor := audit.ActorFromContext(r.Context()); actor != "" {
-				fields["actor"] = actor
+				fields = append(fields, zap.String("actor", actor))
 			}
-			log.WithFields(fields).Info("request")
+			log.Info("request", fields...)
 		})
 	}
 }

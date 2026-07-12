@@ -2,9 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap/zapcore"
 )
 
 // TestEnv verifies the env() helper returns the env var when set and
@@ -36,10 +37,15 @@ func TestNewLoggerFromEnv_UsesRuntimeEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newLoggerFromEnv: %v", err)
 	}
-	if logger.Level != logrus.DebugLevel {
-		t.Fatalf("level = %v, want debug", logger.Level)
+	if !logger.Core().Enabled(zapcore.DebugLevel) {
+		t.Fatalf("debug level disabled, want enabled")
 	}
-	if _, ok := logger.Formatter.(*logrus.JSONFormatter); !ok {
-		t.Fatalf("formatter = %T, want JSONFormatter", logger.Formatter)
+	logger.Debug("debug env log")
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &entry); err != nil {
+		t.Fatalf("parse json log %q: %v", out.String(), err)
+	}
+	if entry["level"] != "debug" {
+		t.Fatalf("level = %v, want debug", entry["level"])
 	}
 }

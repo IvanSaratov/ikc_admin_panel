@@ -10,7 +10,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
 	"github.com/alexedwards/scs/v2"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -23,9 +23,9 @@ type Server struct {
 // the caller (main.go) doesn't have to repeat env-handling logic. If
 // any of the underlying constructors fails (e.g. bad CSRF key), the
 // error is returned at startup rather than at first-request.
-func NewServer(addr string, database *sql.DB, log logrus.FieldLogger, frontend FrontendConfig) (*Server, error) {
+func NewServer(addr string, database *sql.DB, log *zap.Logger, frontend FrontendConfig) (*Server, error) {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 
 	sessionCfg, err := admin.LoadSessionConfig()
@@ -55,8 +55,9 @@ func NewServer(addr string, database *sql.DB, log logrus.FieldLogger, frontend F
 
 	return &Server{
 		httpServer: &http.Server{
-			Addr:    addr,
-			Handler: handler,
+			Addr:     addr,
+			Handler:  handler,
+			ErrorLog: zap.NewStdLog(log.Named("http")),
 		},
 	}, nil
 }

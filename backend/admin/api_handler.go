@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
+	"go.uber.org/zap"
 )
 
 type loginRequest struct {
@@ -58,14 +59,14 @@ func (h *Handler) PostLoginJSON(w http.ResponseWriter, r *http.Request) {
 			Actor:      auditLogin,
 			Details:    map[string]any{"reason": errReason(err)},
 		}); auditErr != nil {
-			h.log.WithError(auditErr).Error("audit login failure")
+			h.log.Error("audit login failure", zap.Error(auditErr))
 		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_credentials"})
 		return
 	}
 
 	if err := h.sessions.RenewToken(r.Context()); err != nil {
-		h.log.WithError(err).Error("renew session token")
+		h.log.Error("renew session token", zap.Error(err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "session_error"})
 		return
 	}
@@ -79,7 +80,7 @@ func (h *Handler) PostLoginJSON(w http.ResponseWriter, r *http.Request) {
 		Actor:      user.Login,
 		EntityID:   sql.NullInt64{Int64: user.ID, Valid: true},
 	}); auditErr != nil {
-		h.log.WithError(auditErr).Error("audit login success")
+		h.log.Error("audit login success", zap.Error(auditErr))
 	}
 
 	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Login: user.Login})
@@ -88,7 +89,7 @@ func (h *Handler) PostLoginJSON(w http.ResponseWriter, r *http.Request) {
 // PostLogoutJSON destroys the current session for the React app.
 func (h *Handler) PostLogoutJSON(w http.ResponseWriter, r *http.Request) {
 	if err := h.sessions.Destroy(r.Context()); err != nil {
-		h.log.WithError(err).Error("destroy session")
+		h.log.Error("destroy session", zap.Error(err))
 	}
 	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
 }

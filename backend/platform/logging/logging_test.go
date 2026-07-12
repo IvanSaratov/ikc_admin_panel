@@ -2,9 +2,10 @@ package logging
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestNewDefaultsToInfoText(t *testing.T) {
@@ -13,34 +14,50 @@ func TestNewDefaultsToInfoText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if logger.Level != logrus.InfoLevel {
-		t.Fatalf("level = %v, want info", logger.Level)
+	if logger.Core().Enabled(zapcore.DebugLevel) {
+		t.Fatalf("debug level enabled, want disabled by default")
 	}
-	if _, ok := logger.Formatter.(*logrus.TextFormatter); !ok {
-		t.Fatalf("formatter = %T, want TextFormatter", logger.Formatter)
+	if !logger.Core().Enabled(zapcore.InfoLevel) {
+		t.Fatalf("info level disabled, want enabled by default")
+	}
+	logger.Info("hello", zapcore.Field{Key: "component", Type: zapcore.StringType, String: "test"})
+	if got := out.String(); !bytes.Contains([]byte(got), []byte("hello")) || !bytes.Contains([]byte(got), []byte("component")) {
+		t.Fatalf("text log output = %q, want message and field", got)
 	}
 }
 
 func TestNewUsesJSONInProd(t *testing.T) {
-	logger, err := New(Config{Env: "prod"})
+	var out bytes.Buffer
+	logger, err := New(Config{Env: "prod", Output: &out})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, ok := logger.Formatter.(*logrus.JSONFormatter); !ok {
-		t.Fatalf("formatter = %T, want JSONFormatter", logger.Formatter)
+	logger.Info("prod log")
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &entry); err != nil {
+		t.Fatalf("parse json log %q: %v", out.String(), err)
+	}
+	if entry["msg"] != "prod log" {
+		t.Fatalf("msg = %v, want prod log", entry["msg"])
 	}
 }
 
 func TestNewAcceptsExplicitLevelAndFormat(t *testing.T) {
-	logger, err := New(Config{Level: "debug", Format: "json"})
+	var out bytes.Buffer
+	logger, err := New(Config{Level: "debug", Format: "json", Output: &out})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if logger.Level != logrus.DebugLevel {
-		t.Fatalf("level = %v, want debug", logger.Level)
+	if !logger.Core().Enabled(zapcore.DebugLevel) {
+		t.Fatalf("debug level disabled, want enabled")
 	}
-	if _, ok := logger.Formatter.(*logrus.JSONFormatter); !ok {
-		t.Fatalf("formatter = %T, want JSONFormatter", logger.Formatter)
+	logger.Debug("debug log")
+	var entry map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &entry); err != nil {
+		t.Fatalf("parse json log %q: %v", out.String(), err)
+	}
+	if entry["level"] != "debug" {
+		t.Fatalf("level = %v, want debug", entry["level"])
 	}
 }
 

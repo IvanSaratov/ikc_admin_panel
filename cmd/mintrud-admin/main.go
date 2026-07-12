@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	stdlog "log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/platform/logging"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -24,16 +25,32 @@ func main() {
 		fmt.Fprintln(os.Stderr, "FATAL: invalid log configuration")
 		os.Exit(1)
 	}
+	defer func() { _ = logger.Sync() }()
+
+	undoGlobals := zap.ReplaceGlobals(logger)
+	defer undoGlobals()
+
+	restoreStdLog := zap.RedirectStdLog(logger.Named("stdlog"))
+	defer restoreStdLog()
+	stdlog.SetFlags(0)
 
 	if err := run(logger); err != nil {
-		logger.Fatal(err)
+		logger.Error("Mintrud Admin stopped with error", zap.Error(err))
+		os.Exit(1)
 	}
 }
 
-func run(logger logrus.FieldLogger) error {
+func run(logger *zap.Logger) error {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	ctx := context.Background()
 	addr := env("MINTRUD_ADMIN_ADDR", ":8080")
 	dbPath := env("MINTRUD_ADMIN_DB", filepath.Join("data", "mintrud-admin.db"))
+	logger.Info("Mintrud Admin starting",
+		zap.String("addr_config", "MINTRUD_ADMIN_ADDR"),
+		zap.String("db_config", "MINTRUD_ADMIN_DB"),
+	)
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
@@ -48,11 +65,13 @@ func run(logger logrus.FieldLogger) error {
 	if err := storage.Migrate(database); err != nil {
 		return err
 	}
+	logger.Info("database migrations applied")
 
 	queries := storagedb.New(database)
 	if err := admin.EnsureBootstrapAdmin(ctx, admin.NewStore(queries), queries, os.Getenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD")); err != nil {
 		return err
 	}
+	logger.Info("bootstrap admin ensured")
 
 	server, err := app.NewServer(addr, database, logger, frontendConfigFromEnv())
 	if err != nil {
@@ -60,7 +79,7 @@ func run(logger logrus.FieldLogger) error {
 	}
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.WithField("addr", addr).Info("Mintrud Admin listening")
+		logger.Info("Mintrud Admin listening", zap.String("addr_config", "MINTRUD_ADMIN_ADDR"))
 		serverErr <- server.ListenAndServe()
 	}()
 
@@ -70,14 +89,19 @@ func run(logger logrus.FieldLogger) error {
 	select {
 	case err := <-serverErr:
 		return err
-	case <-stop:
+	case sig := <-stop:
+		logger.Info("shutdown signal received", zap.String("signal", sig.String()))
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return server.Shutdown(shutdownCtx)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		logger.Info("server shutdown complete")
+		return nil
 	}
 }
 
-func newLoggerFromEnv(output io.Writer) (*logrus.Logger, error) {
+func newLoggerFromEnv(output io.Writer) (*zap.Logger, error) {
 	return logging.New(logging.Config{
 		Env:    os.Getenv("MINTRUD_ADMIN_ENV"),
 		Level:  os.Getenv("MINTRUD_ADMIN_LOG_LEVEL"),

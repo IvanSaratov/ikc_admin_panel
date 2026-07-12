@@ -10,7 +10,8 @@ import (
 	"testing"
 
 	"github.com/gorilla/csrf"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // TestPadOrTruncate locks the CSRF key-length normaliser: input of the
@@ -130,9 +131,11 @@ func TestLoadCSRFWithLogger_UsesProvidedLogger(t *testing.T) {
 	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
 
 	var out bytes.Buffer
-	logger := logrus.New()
-	logger.SetOutput(&out)
-	logger.SetFormatter(&logrus.JSONFormatter{})
+	logger := zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(&out),
+		zapcore.InfoLevel,
+	))
 
 	if _, err := LoadCSRFWithLogger(logger); err != nil {
 		t.Fatalf("LoadCSRFWithLogger: %v", err)

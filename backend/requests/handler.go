@@ -3,7 +3,7 @@ package requests
 import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // Handler wires the requests.Service into the application container. The
@@ -13,14 +13,14 @@ type Handler struct {
 	service *Service
 	queries *storagedb.Queries
 	audit   *audit.Service
-	log     logrus.FieldLogger
+	log     *zap.Logger
 }
 
 // NewHandler constructs a requests.Handler. db is wired separately into
 // Service by app/container.go so ApplyRow can use storage.WithTx.
-func NewHandler(queries *storagedb.Queries, auditSvc *audit.Service, log logrus.FieldLogger) *Handler {
+func NewHandler(queries *storagedb.Queries, auditSvc *audit.Service, log *zap.Logger) *Handler {
 	if log == nil {
-		log = logrus.StandardLogger()
+		log = zap.NewNop()
 	}
 	svc := NewService(queries, auditSvc)
 	return &Handler{

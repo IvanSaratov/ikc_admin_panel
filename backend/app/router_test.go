@@ -19,7 +19,8 @@ import (
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/gorilla/csrf"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -64,9 +65,11 @@ func TestFrontendLoginHeadFallsBackToSPAIndex(t *testing.T) {
 
 func TestRequestLoggingMiddlewareWritesSafeFields(t *testing.T) {
 	var logBuf bytes.Buffer
-	logger := logrus.New()
-	logger.SetFormatter(&logrus.JSONFormatter{})
-	logger.SetOutput(&logBuf)
+	logger := zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(&logBuf),
+		zapcore.InfoLevel,
+	))
 
 	router, _ := newTestRouterWithDBAndLog(t, logger)
 	cookies := testLoginPOST(t, router)
@@ -254,7 +257,7 @@ func newTestRouterWithDB(t *testing.T) (http.Handler, *sql.DB) {
 	return newTestRouterWithDBAndLog(t, nil)
 }
 
-func newTestRouterWithDBAndLog(t *testing.T, logger logrus.FieldLogger) (http.Handler, *sql.DB) {
+func newTestRouterWithDBAndLog(t *testing.T, logger *zap.Logger) (http.Handler, *sql.DB) {
 	return newTestRouterWithFrontend(t, logger, app.FrontendConfig{
 		Mode: app.FrontendEmbedded,
 		Assets: fstest.MapFS{
@@ -270,7 +273,7 @@ func newTestRouterWithFrontendMode(t *testing.T, mode app.FrontendMode) http.Han
 	return router
 }
 
-func newTestRouterWithFrontend(t *testing.T, logger logrus.FieldLogger, frontend app.FrontendConfig) (http.Handler, *sql.DB) {
+func newTestRouterWithFrontend(t *testing.T, logger *zap.Logger, frontend app.FrontendConfig) (http.Handler, *sql.DB) {
 	return newTestRouterWithFrontendAndLoginRate(t, logger, frontend, nil)
 }
 
@@ -280,7 +283,7 @@ func newTestRouterWithLoginRate(t *testing.T, loginRate *admin.RateLimiter) http
 	return router
 }
 
-func newTestRouterWithFrontendAndLoginRate(t *testing.T, logger logrus.FieldLogger, frontend app.FrontendConfig, loginRate *admin.RateLimiter) (http.Handler, *sql.DB) {
+func newTestRouterWithFrontendAndLoginRate(t *testing.T, logger *zap.Logger, frontend app.FrontendConfig, loginRate *admin.RateLimiter) (http.Handler, *sql.DB) {
 	t.Helper()
 
 	ctx := context.Background()

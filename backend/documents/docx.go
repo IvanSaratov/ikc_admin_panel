@@ -10,6 +10,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/documents/legacy/models"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
+	"go.uber.org/zap"
 )
 
 // protocolTemplateFS embeds the legacy DOCX template so the binary asset
@@ -124,7 +125,10 @@ func generateDOCXImpl(ctx context.Context, svc *Service, q *storagedb.Queries, p
 	fileName := docxFileName(svc, protocolID)
 	run, err := svc.recordGenerationRun(ctx, protocolID, "docx", "success", fileName, "")
 	if err != nil {
-		svc.log.WithField("protocol_id", protocolID).WithError(err).Error("insert generation_runs row after docx success")
+		svc.log.Error("insert generation_runs row after docx success",
+			zap.Int64("protocol_id", protocolID),
+			zap.Error(err),
+		)
 		return zipped, nil, nil
 	}
 	svc.recordAudit(ctx, "documents.generate.completed", protocolID, map[string]any{
