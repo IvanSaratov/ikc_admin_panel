@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 
@@ -61,7 +62,7 @@ export function Sidebar() {
                 className={`sidebar-group-button${isGroupActive ? " is-active" : ""}`}
                 type="button"
                 aria-expanded={isOpen}
-                aria-controls={`sidebar-group-${group.id}`}
+                aria-controls={isOpen ? `sidebar-group-${group.id}` : undefined}
                 onClick={() =>
                   setOpenGroups((current) => {
                     const next = new Set(current);
@@ -77,18 +78,29 @@ export function Sidebar() {
                 <span>{group.label}</span>
                 <ToggleIcon className="sidebar-group-icon" aria-hidden />
               </button>
-              <div className="sidebar-subnav" id={`sidebar-group-${group.id}`} hidden={!isOpen}>
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.id}
-                    to={item.path}
-                    className={() => `sidebar-sublink${isRouteActive(location.pathname, item.path) ? " is-active" : ""}`}
+              <AnimatePresence initial={false}>
+                {isOpen ? (
+                  <motion.div
+                    className="sidebar-subnav"
+                    id={`sidebar-group-${group.id}`}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
                   >
-                    <item.icon className="sidebar-link-icon" aria-hidden />
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.id}
+                        to={item.path}
+                        className={() => `sidebar-sublink${isRouteActive(location.pathname, item.path) ? " is-active" : ""}`}
+                      >
+                        <item.icon className="sidebar-link-icon" aria-hidden />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </section>
           );
         })}

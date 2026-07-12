@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { motion } from "motion/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 interface DetailDrawerProps {
@@ -71,7 +72,16 @@ export function DetailDrawer({ title, open, onClose, children }: DetailDrawerPro
   }
 
   return (
-    <aside ref={drawerRef} className="detail-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <motion.aside
+      ref={drawerRef}
+      className="detail-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+    >
       <div className="detail-drawer-header">
         <h2 id={titleId}>{title}</h2>
         <button ref={closeButtonRef} className="icon-button" type="button" aria-label="Закрыть" onClick={onClose}>
@@ -79,6 +89,6 @@ export function DetailDrawer({ title, open, onClose, children }: DetailDrawerPro
         </button>
       </div>
       <div className="detail-drawer-body">{children}</div>
-    </aside>
+    </motion.aside>
   );
 }
