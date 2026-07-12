@@ -25,16 +25,22 @@
 
 ```bash
 sh tests/run_schema_tests.sh
-go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
-go test ./...
+go -C backend run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
+go -C backend test ./...
 npm ci --prefix frontend
 npm test --prefix frontend
 npm run build --prefix frontend
-go run ./cmd/mintrud-admin
+go -C backend run ./cmd/mintrud-admin
 ```
 
+`backend/` — самостоятельный Go-модуль: в нём находятся `go.mod`, команды,
+миграции и конфигурация sqlc. Go-команды из корня репозитория запускаются через
+`go -C backend`. Docker по-прежнему использует корень репозитория как build
+context, потому что образ включает и backend, и собранный frontend.
+
 Версия sqlc (`v1.30.0`) pinned в этой команде и в `Dockerfile` — держите их
-синхронно. React SPA собирается из `frontend/` через Vite.
+синхронно. sqlc работает с `backend/sqlc.yaml` и миграциями из
+`backend/migrations/`. React SPA собирается из `frontend/` через Vite.
 
 По умолчанию приложение слушает `:8080` и создает SQLite DB в
 `data/mintrud-admin.db`.
@@ -42,7 +48,7 @@ go run ./cmd/mintrud-admin
 Переопределение:
 
 ```bash
-MINTRUD_ADMIN_ADDR=:8090 MINTRUD_ADMIN_DB=/tmp/mintrud-admin.db go run ./cmd/mintrud-admin
+MINTRUD_ADMIN_ADDR=:8090 MINTRUD_ADMIN_DB=/tmp/mintrud-admin.db go -C backend run ./cmd/mintrud-admin
 ```
 
 ## Запуск в Docker
@@ -88,8 +94,10 @@ docker compose down -v # полная очистка SQLite volume
 через `docker compose ps` показывает `healthy` после ~10 секунд.
 
 Multi-stage `Dockerfile`: frontend-builder на `node:24-alpine` собирает React
-SPA, Go builder на `golang:1.26.4-alpine` запускает sqlc и компилирует сервер,
-runtime на `alpine:3.20` с `tini` (PID-1 reaper). Бинарь собирается статически
+SPA, Go builder на `golang:1.26.4-alpine` кэширует зависимости по `backend/go.mod`,
+запускает sqlc внутри вложенного Go-модуля с `backend/sqlc.yaml` и
+`backend/migrations/`, а затем компилирует сервер. Runtime на `alpine:3.20` с
+`tini` (PID-1 reaper). Бинарь собирается статически
 (`CGO_ENABLED=0`), поэтому в runtime нет зависимостей кроме libc +
 ca-certificates.
 
