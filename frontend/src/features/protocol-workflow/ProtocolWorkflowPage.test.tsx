@@ -10,4 +10,10 @@ describe("ProtocolWorkflowPage", () => {
     expect(screen.getByRole("heading", { name: /2605А15/i })).toBeInTheDocument();
     expect(screen.getByText(/Заполните номера Минтруда/i)).toBeInTheDocument();
   });
+
+  it("renders loading text while workflow is unavailable", () => {
+    render(<ProtocolWorkflowPage workflow={undefined} />);
+
+    expect(screen.getByText(/Загрузка протокола/i)).toBeInTheDocument();
+  });
 });

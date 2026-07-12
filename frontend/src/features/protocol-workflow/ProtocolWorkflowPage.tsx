@@ -1,10 +1,14 @@
 import type { ProtocolWorkflow, WorkflowStage } from "../../api/mockProtocolWorkflow";
 
 interface Props {
-  workflow: ProtocolWorkflow;
+  workflow?: ProtocolWorkflow;
 }
 
 export function ProtocolWorkflowPage({ workflow }: Props) {
+  if (!workflow) {
+    return <p>Загрузка протокола...</p>;
+  }
+
   return (
     <div className="workflow-page">
       <header className="workflow-header">
