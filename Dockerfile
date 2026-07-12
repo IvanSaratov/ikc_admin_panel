@@ -1,3 +1,16 @@
+# --- Frontend builder ------------------------------------------------------
+# Node is used only at image build time. The runtime image still contains
+# only the Go binary, SQLite data directory, and built static assets.
+FROM node:24-alpine AS frontend-builder
+
+WORKDIR /src/frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
 # --- Builder ---------------------------------------------------------------
 # Pinned to the same Go version declared in go.mod so the toolchain in the
 # image cannot drift from what developers use locally. alpine keeps the
@@ -59,6 +72,7 @@ WORKDIR /app
 # `up` cycles. /app itself is owned by root; the data subdirectory
 # is created writable by mintrud:mintrud at startup (mkdir -m 0755).
 COPY --from=builder --chown=mintrud:mintrud /out/mintrud-admin /app/mintrud-admin
+COPY --from=frontend-builder --chown=mintrud:mintrud /src/frontend/dist /app/frontend/dist
 RUN mkdir -p /app/data && chown -R mintrud:mintrud /app
 
 USER mintrud:mintrud

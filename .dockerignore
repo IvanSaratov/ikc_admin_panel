@@ -46,3 +46,7 @@ backend/storage/db/models.go
 backend/storage/db/*.sql.go
 backend/storage/queries/*.sql.go
 **/*_templ.go
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
