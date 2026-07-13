@@ -23,6 +23,8 @@ jobs:
       - run: sh tests/run_schema_tests.sh
       - run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
         working-directory: backend
+      - run: git diff --exit-code -- storage/db
+        working-directory: backend
       - run: go test ./...
         working-directory: backend
 

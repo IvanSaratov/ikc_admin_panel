@@ -32,11 +32,12 @@ WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Now copy the rest of the source and run code generation before
-# building. From the backend module, sqlc reads migrations/*.sql plus
-# storage/queries/*.sql and writes storage/db/*.go. It must be re-run on every build so a
-# stale commit cannot ship out-of-sync generated code.
-COPY . /src
+# Copy only backend source, so frontend and repository-documentation changes
+# do not invalidate the Go build layer. From the backend module, sqlc reads
+# migrations/*.sql plus storage/queries/*.sql and writes storage/db/*.go. It
+# must be re-run on every build so a stale commit cannot ship out-of-sync
+# generated code.
+COPY backend/ ./
 RUN sqlc generate \
     && CGO_ENABLED=0 GOOS=linux go build \
         -ldflags="-s -w" \

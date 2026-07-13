@@ -48,11 +48,10 @@ services:
     # production; this MVP default favours operator control.
     restart: unless-stopped
 
-    # Compose's healthcheck mirrors the Dockerfile's, but uses curl
-    # instead of wget so it works regardless of the runtime image's
-    # installed busybox tools. `--fail` makes curl exit non-zero on
-    # HTTP >= 400, which is what `condition: service_healthy` and
-    # `docker compose ps` both read as "not ready".
+    # Compose's healthcheck mirrors the Dockerfile's BusyBox wget probe.
+    # In spider mode wget exits zero for a reachable 2xx/3xx response and
+    # non-zero for request failures, including HTTP 4xx/5xx; Compose reports
+    # a non-zero probe as unhealthy.
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/login"]
       interval: 30s
