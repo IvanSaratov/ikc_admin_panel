@@ -1,4 +1,4 @@
-# docker-compose.yml — single-service deployment for the Mintrud Admin
+# compose.yaml — local developer stack for the Mintrud Admin
 # monolith. SQLite is embedded, so there is no separate database
 # container; persistence is provided by a named volume mounted at
 # /app/data inside the container.
@@ -17,8 +17,11 @@ services:
     # publish images to a registry. When it does, swap to `image:` +
     # `build:` for layered upgrades.
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Keep the repository root as the build context: the image needs both
+      # backend/ and frontend/. The Dockerfile itself lives with local-dev
+      # infrastructure under infra/.
+      context: ..
+      dockerfile: infra/Dockerfile
     image: mintrud-admin:local
 
     # The app listens on :8080 by default. The host port (left) may

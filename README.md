@@ -23,7 +23,7 @@
 
 ## Локальный запуск
 
-Прямой `go run` не загружает корневой `.env`, поэтому перед запуском
+Прямой `go run` не загружает `infra/.env`, поэтому перед запуском
 задайте обязательные переменные в текущей shell-сессии:
 
 ```bash
@@ -43,10 +43,11 @@ go -C backend run ./cmd/mintrud-admin
 
 `backend/` — самостоятельный Go-модуль: в нём находятся `go.mod`, команды,
 миграции и конфигурация sqlc. Go-команды из корня репозитория запускаются через
-`go -C backend`. Docker по-прежнему использует корень репозитория как build
-context, потому что образ включает и backend, и собранный frontend.
+`go -C backend`. Docker использует корень репозитория как build context, хотя
+developer-конфигурация лежит в `infra/`, потому что образ включает и backend,
+и собранный frontend.
 
-Версия sqlc (`v1.30.0`) pinned в этой команде и в `Dockerfile` — держите их
+Версия sqlc (`v1.30.0`) pinned в этой команде и в `infra/Dockerfile` — держите их
 синхронно. sqlc работает с `backend/sqlc.yaml` и миграциями из
 `backend/migrations/`. React SPA собирается из `frontend/` через Vite.
 
@@ -63,10 +64,15 @@ MINTRUD_ADMIN_ADDR=:8090 MINTRUD_ADMIN_DB=/tmp/mintrud-admin.db go -C backend ru
 
 ## Запуск в Docker
 
+Docker-контур предназначен только для локальной разработки. Клиентская сборка
+выполняется отдельно через GitHub Actions и упаковывается в MSI.
+
 Один сервис `app`, SQLite лежит в named volume `mintrud_data`. Параметры
-читаются из `.env` (шаблон — `.env.example`).
+читаются из `infra/.env` (шаблон — `infra/.env.example`). Все Compose-команды
+выполняются из `infra/`.
 
 ```bash
+cd infra
 cp .env.example .env
 # отредактируйте MINTRUD_ADMIN_BOOTSTRAP_PASSWORD в .env
 # для локального HTTP-деплоя оставьте MINTRUD_ADMIN_PLAINTEXT_CSRF=true
@@ -86,7 +92,7 @@ POST-формы получают 403. За reverse proxy с TLS-терминац
 штатно.
 
 После старта приложение доступно на <http://localhost:8081/login>. Порт
-хоста задаётся в `docker-compose.yml`; контейнер слушает `8080`, наружу
+хоста задаётся в `infra/compose.yaml`; контейнер слушает `8080`, наружу
 в репо опубликован `8081`, потому что `8080` часто занят самим Docker
 Desktop.
 
@@ -103,7 +109,7 @@ docker compose down -v # полная очистка SQLite volume
 Данные переживают `docker compose down` (volume сохраняется). Healthcheck
 через `docker compose ps` показывает `healthy` после ~10 секунд.
 
-Multi-stage `Dockerfile`: frontend-builder на `node:24-alpine` собирает React
+Multi-stage `infra/Dockerfile`: frontend-builder на `node:24-alpine` собирает React
 SPA, Go builder на `golang:1.26.4-alpine` кэширует зависимости по `backend/go.mod`
 и `backend/go.sum`, запускает sqlc внутри вложенного Go-модуля,
 используя `backend/sqlc.yaml` и `backend/migrations/`, и компилирует сервер.
@@ -132,7 +138,8 @@ rg -l --hidden --no-ignore -i \
 клиентов, корпоративные почтовые домены, production-credentials, локальные
 базы данных и заполненные `.env` блокируют открытую публикацию.
 
-`.env` и локальные SQLite-файлы игнорируются через `.gitignore` и
-`.dockerignore`; коммитить нужно только `.env.example`. Fixture/seed-данные
+`infra/.env` и локальные SQLite-файлы игнорируются через `.gitignore` и
+`infra/Dockerfile.dockerignore`; коммитить нужно только `infra/.env.example`.
+Fixture/seed-данные
 должны быть явно синтетическими: используйте домены `.example` или
 `example.test`, тестовые ФИО и ненастоящие организации.

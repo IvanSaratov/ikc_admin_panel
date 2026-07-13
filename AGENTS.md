@@ -5,11 +5,15 @@
 Use the compose stack as the canonical app run:
 
 ```bash
+cd infra
 cp .env.example .env
 # Edit .env locally and set MINTRUD_ADMIN_BOOTSTRAP_PASSWORD.
 # Keep MINTRUD_ADMIN_PLAINTEXT_CSRF=true for local plain HTTP.
 DOCKER_BUILDKIT=1 docker compose up --build -d
 ```
+
+Run all Compose commands from `infra/`. This stack is local developer tooling;
+client releases are built through GitHub Actions and packaged as MSI.
 
 The app is available at <http://localhost:8081/login>. Compose maps host
 `8081` to container `8080`; do not document `localhost:8080` as the compose

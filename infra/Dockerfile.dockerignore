@@ -4,10 +4,10 @@
 .gitattributes
 
 # Docker artefacts are generated, not part of the build source.
-Dockerfile
-.dockerignore
-docker-compose.yml
-docker-compose.*.yml
+infra/Dockerfile
+infra/Dockerfile.dockerignore
+infra/compose.yaml
+infra/README.md
 
 # Runtime data that lives on the host, not in the image.
 data/
@@ -16,10 +16,9 @@ data/
 *.sqlite
 *.sqlite3
 
-# Local env files (compose reads .env from the host, never from image).
-.env
-.env.*
-!.env.example
+# Local env files (compose reads infra/.env from the host, never from image).
+**/.env
+**/.env.*
 
 # Documentation / planning that's irrelevant to compilation.
 docs/

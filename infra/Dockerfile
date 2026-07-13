@@ -17,7 +17,7 @@ RUN npm run build
 # builder small; git is required for `go mod download` to fetch modules.
 FROM golang:1.26.4-alpine AS builder
 
-# sqlc version must match the one documented in README.md. We install it with
+# sqlc version must match the one documented in the root README.md. We install it with
 # `go install` so the binary lands in GOBIN (default $GOPATH/bin) and is on PATH
 # for the subsequent generate step. The runtime image does not need the tool:
 # generated sources are baked into the binary.
@@ -74,7 +74,7 @@ RUN mkdir -p /app/data && chown -R mintrud:mintrud /app
 USER mintrud:mintrud
 
 # Listen on 8080 (default for the app). Exposed for documentation and
-# for compose's port mapping; docker-compose.yml still publishes it
+# for compose's port mapping; infra/compose.yaml still publishes it
 # explicitly via `ports:`.
 EXPOSE 8080
 
