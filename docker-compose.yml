@@ -6,7 +6,7 @@
 # Quick start:
 #   cp .env.example .env       # then edit MINTRUD_ADMIN_BOOTSTRAP_PASSWORD
 #   docker compose up --build
-#   open http://localhost:8080/login
+#   open http://localhost:8081/login
 
 name: mintrud-admin
 
