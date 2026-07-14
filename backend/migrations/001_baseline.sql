@@ -1,4 +1,5 @@
 -- +goose Up
+PRAGMA application_id = 0x494B4341;
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE program_groups (
@@ -40,7 +41,9 @@ CREATE TABLE employers (
   inn_normalized TEXT NOT NULL,
   canonical_name TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'inactive'))
 );
 
 CREATE UNIQUE INDEX ux_employers_inn_normalized
@@ -56,7 +59,9 @@ CREATE TABLE workers (
   email TEXT NOT NULL,
   birth_date TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'inactive'))
 );
 
 CREATE UNIQUE INDEX ux_workers_snils_normalized
@@ -88,13 +93,48 @@ CREATE INDEX ix_worker_employers_worker_id
 CREATE INDEX ix_worker_employers_employer_id
   ON worker_employers (employer_id);
 
+CREATE TABLE imports (
+  id INTEGER PRIMARY KEY,
+  source_type TEXT NOT NULL
+    CHECK (source_type IN ('xlsx', 'manual', 'other')),
+  source_file_name TEXT,
+  source_sha256 TEXT,
+  uploaded_by_actor TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'received'
+    CHECK (status IN ('received', 'processing', 'completed', 'failed')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX ix_imports_status
+  ON imports (status);
+
+CREATE INDEX ix_imports_received_at
+  ON imports (received_at);
+
+CREATE TABLE import_rows (
+  id INTEGER PRIMARY KEY,
+  import_id INTEGER NOT NULL,
+  row_number INTEGER NOT NULL CHECK (row_number > 0),
+  raw_data TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (import_id) REFERENCES imports (id)
+);
+
+CREATE INDEX ix_import_rows_import_id
+  ON import_rows (import_id);
+
+CREATE UNIQUE INDEX ux_import_rows_import_row_number
+  ON import_rows (import_id, row_number);
+
 CREATE TABLE client_requests (
   id INTEGER PRIMARY KEY,
   employer_id INTEGER NOT NULL,
   received_date TEXT NOT NULL,
   source_type TEXT NOT NULL
     CHECK (source_type IN ('xlsx', 'manual', 'other')),
-  source_import_id INTEGER,
+  source_import_id INTEGER REFERENCES imports (id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'review'
     CHECK (status IN ('review', 'completed', 'cancelled')),
   notes TEXT,
@@ -249,6 +289,7 @@ CREATE TABLE protocols (
   fixed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  protocol_suffix TEXT,
   CHECK (
     protocol_number IS NULL
     OR (
@@ -283,8 +324,13 @@ CREATE INDEX ix_protocols_status
 CREATE INDEX ix_protocols_training_start_date
   ON protocols (training_start_date);
 
-CREATE UNIQUE INDEX ux_protocols_group_year_sequence
-  ON protocols (program_group_id, sequence_year, annual_sequence_number)
+CREATE UNIQUE INDEX ux_protocols_group_year_seq_suffix
+  ON protocols (
+    program_group_id,
+    sequence_year,
+    annual_sequence_number,
+    COALESCE(protocol_suffix, '')
+  )
   WHERE annual_sequence_number IS NOT NULL;
 
 CREATE UNIQUE INDEX ux_protocols_protocol_number
@@ -348,7 +394,7 @@ CREATE INDEX ix_generation_runs_generated_at
 CREATE TABLE action_log (
   id INTEGER PRIMARY KEY,
   actor TEXT NOT NULL
-    CHECK (actor IN ('system', 'import', 'operator_unidentified')),
+    CHECK (length(actor) > 0 AND length(actor) <= 200),
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id INTEGER,
@@ -361,3 +407,18 @@ CREATE INDEX ix_action_log_created_at
 
 CREATE INDEX ix_action_log_entity
   ON action_log (entity_type, entity_id);
+
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  login TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL
+    CHECK (role IN ('operator', 'admin')),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'disabled')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX ux_users_login
+  ON users (login);
