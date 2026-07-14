@@ -49,7 +49,8 @@ func canonicalDatabasePath(dbPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("make database path absolute %q: %w", dbPath, err)
 	}
-	if _, err := os.Stat(absolutePath); err == nil {
+	_, statErr := os.Stat(absolutePath)
+	if statErr == nil {
 		canonicalPath, err := filepath.EvalSymlinks(absolutePath)
 		if err != nil {
 			return "", fmt.Errorf("canonicalize database path %q: %w", absolutePath, err)
@@ -59,8 +60,20 @@ func canonicalDatabasePath(dbPath string) (string, error) {
 			return "", fmt.Errorf("make canonical database path absolute %q: %w", canonicalPath, err)
 		}
 		return filepath.Clean(canonicalPath), nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("stat database path %q: %w", absolutePath, err)
+	}
+	if !errors.Is(statErr, os.ErrNotExist) {
+		return "", fmt.Errorf("stat database path %q: %w", absolutePath, statErr)
+	}
+
+	info, lstatErr := os.Lstat(absolutePath)
+	if lstatErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("dangling database symlink %q is unsupported", absolutePath)
+		}
+		return "", fmt.Errorf("stat database path %q: %w", absolutePath, statErr)
+	}
+	if !errors.Is(lstatErr, os.ErrNotExist) {
+		return "", fmt.Errorf("inspect missing database path %q: %w", absolutePath, lstatErr)
 	}
 
 	parent := filepath.Dir(absolutePath)

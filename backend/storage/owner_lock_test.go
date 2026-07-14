@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,6 +83,41 @@ func TestAcquireOwnerLockContendsAcrossFinalSymlink(t *testing.T) {
 	}
 	if !errors.Is(err, ErrDatabaseInUse) {
 		t.Fatalf("AcquireOwnerLock(symlink) error = %v, want ErrDatabaseInUse", err)
+	}
+}
+
+func TestAcquireOwnerLockRejectsDanglingFinalSymlink(t *testing.T) {
+	root := t.TempDir()
+	targetPath := filepath.Join(root, "missing-target.db")
+	aliasPath := filepath.Join(root, "alias.db")
+	createSymlinkOrSkip(t, targetPath, aliasPath)
+
+	owner, err := AcquireOwnerLock(aliasPath)
+	if owner != nil {
+		_ = owner.Close()
+		t.Fatal("AcquireOwnerLock(dangling symlink) returned a lock, want nil")
+	}
+	if err == nil {
+		t.Fatal("AcquireOwnerLock(dangling symlink) error = nil, want rejection")
+	}
+	if errors.Is(err, ErrDatabaseInUse) {
+		t.Fatalf("AcquireOwnerLock(dangling symlink) error = %v, want non-contention error", err)
+	}
+	if !strings.Contains(err.Error(), "dangling database symlink") {
+		t.Fatalf("AcquireOwnerLock(dangling symlink) error = %v, want clear dangling symlink error", err)
+	}
+	for _, lockPath := range []string{aliasPath + ".lock", targetPath + ".lock"} {
+		if _, statErr := os.Stat(lockPath); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("lock file %q stat error = %v, want not exist", lockPath, statErr)
+		}
+	}
+
+	targetOwner, err := AcquireOwnerLock(targetPath)
+	if err != nil {
+		t.Fatalf("AcquireOwnerLock(target path) error = %v", err)
+	}
+	if err := targetOwner.Close(); err != nil {
+		t.Fatalf("target owner Close() error = %v", err)
 	}
 }
 
