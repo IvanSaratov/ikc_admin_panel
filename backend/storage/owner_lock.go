@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/gofrs/flock"
@@ -14,12 +15,17 @@ type OwnerLock struct {
 	file *flock.Flock
 }
 
+// AcquireOwnerLock takes the cooperative process-ownership lock for dbPath.
+// Hard-linked database aliases cannot be distinguished by this path-based lock
+// and are unsupported; callers must not configure the same database through
+// hard links.
 func AcquireOwnerLock(dbPath string) (*OwnerLock, error) {
-	if dbPath == "" {
-		return nil, errors.New("database path is empty")
+	canonicalPath, err := canonicalDatabasePath(dbPath)
+	if err != nil {
+		return nil, err
 	}
 
-	lockPath := filepath.Clean(dbPath) + ".lock"
+	lockPath := canonicalPath + ".lock"
 	file := flock.New(lockPath, flock.SetPermissions(0o600))
 	locked, err := file.TryLock()
 	if err != nil {
@@ -32,6 +38,41 @@ func AcquireOwnerLock(dbPath string) (*OwnerLock, error) {
 	}
 
 	return &OwnerLock{file: file}, nil
+}
+
+func canonicalDatabasePath(dbPath string) (string, error) {
+	if dbPath == "" {
+		return "", errors.New("database path is empty")
+	}
+
+	absolutePath, err := filepath.Abs(dbPath)
+	if err != nil {
+		return "", fmt.Errorf("make database path absolute %q: %w", dbPath, err)
+	}
+	if _, err := os.Stat(absolutePath); err == nil {
+		canonicalPath, err := filepath.EvalSymlinks(absolutePath)
+		if err != nil {
+			return "", fmt.Errorf("canonicalize database path %q: %w", absolutePath, err)
+		}
+		canonicalPath, err = filepath.Abs(canonicalPath)
+		if err != nil {
+			return "", fmt.Errorf("make canonical database path absolute %q: %w", canonicalPath, err)
+		}
+		return filepath.Clean(canonicalPath), nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("stat database path %q: %w", absolutePath, err)
+	}
+
+	parent := filepath.Dir(absolutePath)
+	canonicalParent, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize database parent %q: %w", parent, err)
+	}
+	canonicalParent, err = filepath.Abs(canonicalParent)
+	if err != nil {
+		return "", fmt.Errorf("make canonical database parent absolute %q: %w", canonicalParent, err)
+	}
+	return filepath.Clean(filepath.Join(canonicalParent, filepath.Base(absolutePath))), nil
 }
 
 func (owner *OwnerLock) Close() error {
