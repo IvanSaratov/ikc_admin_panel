@@ -109,11 +109,7 @@ func withOwnedDatabase(
 	}
 	defer func() { retErr = errors.Join(retErr, owner.Close()) }()
 	ownedPath := owner.DatabasePath()
-	if policy == databaseMustExist {
-		if err := requireExistingSQLiteDatabase(ctx, ownedPath); err != nil {
-			return err
-		}
-	} else {
+	if policy == databaseMayCreate {
 		currentState, err := inspectDatabaseFile(ownedPath)
 		if err != nil {
 			return err
@@ -130,7 +126,7 @@ func withOwnedDatabase(
 
 	var db *sql.DB
 	if policy == databaseMustExist {
-		db, err = storage.OpenExisting(ctx, ownedPath)
+		db, err = storage.OpenExistingForMaintenance(ctx, ownedPath)
 	} else {
 		db, err = storage.OpenForPreparation(ctx, ownedPath)
 	}
@@ -142,13 +138,7 @@ func withOwnedDatabase(
 }
 
 func inspectExistingPreparationCandidate(ctx context.Context, ownedPath string) (retErr error) {
-	db, err := storage.OpenOwnedReadOnly(ctx, ownedPath)
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, db.Close()) }()
-	_, _, err = storage.InspectExistingEmbeddedPreparation(ctx, db)
-	return err
+	return inspectExistingCandidate(ctx, ownedPath, storage.OpenOwnedReadOnly, false)
 }
 
 func requireExistingSQLiteDatabase(ctx context.Context, path string) error {
@@ -159,22 +149,32 @@ func requireExistingSQLiteDatabase(ctx context.Context, path string) error {
 	if state != databaseFileSQLite {
 		return fmt.Errorf("%w: existing non-empty SQLite database is required", storage.ErrSchemaNotReady)
 	}
-	return inspectApplicationDatabaseReadOnly(ctx, path)
+	return inspectExistingCandidate(ctx, path, storage.OpenReadOnly, true)
 }
 
-func inspectApplicationDatabaseReadOnly(ctx context.Context, path string) (retErr error) {
-	db, err := storage.OpenReadOnly(ctx, path)
+type readOnlyDatabaseOpener func(context.Context, string) (*sql.DB, error)
+
+func inspectExistingCandidate(
+	ctx context.Context,
+	path string,
+	open readOnlyDatabaseOpener,
+	requireReleasedApplication bool,
+) (retErr error) {
+	db, err := open(ctx, path)
 	if err != nil {
 		return fmt.Errorf("validate existing SQLite database: %w", err)
 	}
 	defer func() { retErr = errors.Join(retErr, db.Close()) }()
 
-	identity, err := storage.InspectDatabaseIdentity(ctx, db)
+	identity, _, err := storage.InspectExistingEmbeddedPreparation(ctx, db)
 	if err != nil {
 		return err
 	}
-	if identity.Fresh {
-		return fmt.Errorf("%w: existing SQLite database has no application schema", storage.ErrSchemaNotReady)
+	if requireReleasedApplication && identity.ApplicationID != storage.SQLiteApplicationID {
+		return fmt.Errorf(
+			"%w: existing maintenance database is not a released IKC schema",
+			storage.ErrSchemaNotReady,
+		)
 	}
 	return nil
 }

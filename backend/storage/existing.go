@@ -20,6 +20,35 @@ func OpenExisting(ctx context.Context, expectedPath string) (*sql.DB, error) {
 	return openOwnedDatabase(ctx, expectedPath, "rw", true)
 }
 
+// OpenExistingForMaintenance opens one path-bound mode=rw handle, validates
+// the embedded application identity and migration version on that handle, and
+// only then configures its connection. Exact Goose bootstrap shells are valid
+// migration-retry candidates but are not valid verify/backup targets.
+func OpenExistingForMaintenance(ctx context.Context, expectedPath string) (*sql.DB, error) {
+	db, err := openOwnedDatabase(ctx, expectedPath, "rw", false)
+	if err != nil {
+		return nil, err
+	}
+	fail := func(operationErr error) (*sql.DB, error) {
+		return nil, errors.Join(operationErr, db.Close())
+	}
+
+	identity, _, err := InspectExistingEmbeddedPreparation(ctx, db)
+	if err != nil {
+		return fail(err)
+	}
+	if identity.ApplicationID != SQLiteApplicationID {
+		return fail(fmt.Errorf(
+			"%w: existing maintenance database is not a released IKC schema",
+			ErrSchemaNotReady,
+		))
+	}
+	if err := configure(ctx, db); err != nil {
+		return fail(fmt.Errorf("configure existing SQLite maintenance database: %w", err))
+	}
+	return db, nil
+}
+
 // OpenForPreparation opens an owned SQLite path and may create a missing file,
 // but deliberately applies no connection PRAGMAs. expectedPath has the same
 // immutable OwnerLock path contract as OpenExisting. Initializer.Prepare

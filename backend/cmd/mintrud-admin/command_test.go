@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
@@ -86,6 +87,137 @@ func TestRunCommandMigrateRejectsForeignSQLiteWithoutMutation(t *testing.T) {
 	}
 	if gooseTables != 0 {
 		t.Fatalf("goose table count = %d, want no schema mutation", gooseTables)
+	}
+}
+
+func TestRunCommandExistingMaintenanceRejectsTooNewBeforeConfiguration(t *testing.T) {
+	for _, action := range []string{"verify", "backup"} {
+		t.Run(action, func(t *testing.T) {
+			dbPath := configureCommandDatabase(t)
+			ctx := context.Background()
+			createTooNewCommandSQLite(t, ctx, dbPath)
+			before, err := os.ReadFile(dbPath)
+			if err != nil {
+				t.Fatalf("read too-new database before command: %v", err)
+			}
+
+			err = runCommand(ctx, []string{"db", action}, &bytes.Buffer{}, nil)
+			if !errors.Is(err, storage.ErrSchemaTooNew) {
+				t.Fatalf("db %s error = %v, want ErrSchemaTooNew", action, err)
+			}
+			after, err := os.ReadFile(dbPath)
+			if err != nil {
+				t.Fatalf("read too-new database after command: %v", err)
+			}
+			if !bytes.Equal(after, before) {
+				t.Fatal("too-new database bytes changed during rejected maintenance command")
+			}
+			for _, suffix := range []string{".lock", "-wal", "-shm"} {
+				if _, statErr := os.Stat(dbPath + suffix); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("SQLite artifact %q stat error = %v, want not exist", suffix, statErr)
+				}
+			}
+			assertCommandDatabaseJournalMode(t, ctx, dbPath, "delete")
+
+			readonly, err := storage.OpenReadOnly(ctx, dbPath)
+			if err != nil {
+				t.Fatalf("open too-new database read-only: %v", err)
+			}
+			defer readonly.Close()
+			var noteColumns int
+			if err := readonly.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('marker') WHERE name = 'note'`).Scan(&noteColumns); err != nil {
+				t.Fatalf("inspect too-new schema: %v", err)
+			}
+			if noteColumns != 1 {
+				t.Fatalf("note column count = %d, want preserved too-new schema", noteColumns)
+			}
+		})
+	}
+}
+
+func TestRunCommandExistingMaintenanceRejectsGooseBootstrapBeforeConfiguration(t *testing.T) {
+	for _, action := range []string{"verify", "backup"} {
+		t.Run(action, func(t *testing.T) {
+			dbPath := configureCommandDatabase(t)
+			ctx := context.Background()
+			createFailedGooseBootstrapCommandSQLite(t, ctx, dbPath)
+			before, err := os.ReadFile(dbPath)
+			if err != nil {
+				t.Fatalf("read Goose bootstrap before command: %v", err)
+			}
+
+			err = runCommand(ctx, []string{"db", action}, &bytes.Buffer{}, nil)
+			if !errors.Is(err, storage.ErrSchemaNotReady) {
+				t.Fatalf("db %s error = %v, want ErrSchemaNotReady", action, err)
+			}
+			after, err := os.ReadFile(dbPath)
+			if err != nil {
+				t.Fatalf("read Goose bootstrap after command: %v", err)
+			}
+			if !bytes.Equal(after, before) {
+				t.Fatal("Goose bootstrap bytes changed during rejected maintenance command")
+			}
+			for _, suffix := range []string{".lock", "-wal", "-shm"} {
+				if _, statErr := os.Stat(dbPath + suffix); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("SQLite artifact %q stat error = %v, want not exist", suffix, statErr)
+				}
+			}
+			assertCommandDatabaseJournalMode(t, ctx, dbPath, "delete")
+		})
+	}
+}
+
+func createTooNewCommandSQLite(t *testing.T, ctx context.Context, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw too-new SQLite fixture: %v", err)
+	}
+	newerFS := fstest.MapFS{
+		"001_base.sql": &fstest.MapFile{Data: []byte(
+			"-- +goose Up\nPRAGMA application_id = 0x494B4341;\n" +
+				"CREATE TABLE marker (id INTEGER PRIMARY KEY);\n",
+		)},
+		"002_newer.sql": &fstest.MapFile{Data: []byte(
+			"-- +goose Up\nALTER TABLE marker ADD COLUMN note TEXT;\n",
+		)},
+	}
+	migrator, err := storage.NewMigrator(db, newerFS)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create too-new migrator: %v", err)
+	}
+	if _, err := migrator.Up(ctx); err != nil {
+		_ = db.Close()
+		t.Fatalf("migrate too-new fixture: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close too-new fixture: %v", err)
+	}
+}
+
+func createFailedGooseBootstrapCommandSQLite(t *testing.T, ctx context.Context, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw Goose bootstrap fixture: %v", err)
+	}
+	failingFS := fstest.MapFS{
+		"001_fail.sql": &fstest.MapFile{Data: []byte(
+			"-- +goose Up\nINSERT INTO missing_bootstrap_table(value) VALUES ('fail');\n",
+		)},
+	}
+	migrator, err := storage.NewMigrator(db, failingFS)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("create failing Goose migrator: %v", err)
+	}
+	if _, err := migrator.Up(ctx); err == nil {
+		_ = db.Close()
+		t.Fatal("failing Goose migration error = nil")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close Goose bootstrap fixture: %v", err)
 	}
 }
 
