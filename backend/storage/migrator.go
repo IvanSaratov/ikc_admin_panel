@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/migrations"
@@ -14,6 +15,11 @@ import (
 )
 
 var ErrSchemaTooNew = errors.New("database schema is newer than this binary")
+
+// migratorUpMu serializes the complete Status-to-apply operation across all
+// Migrator instances in this process. It does not provide cross-process
+// exclusion; owner locking is a separate concern.
+var migratorUpMu sync.Mutex
 
 type MigrationInfo struct {
 	Version int64
@@ -135,6 +141,9 @@ func (m *Migrator) Status(ctx context.Context) (MigrationStatus, error) {
 }
 
 func (m *Migrator) Up(ctx context.Context) (MigrationResult, error) {
+	migratorUpMu.Lock()
+	defer migratorUpMu.Unlock()
+
 	status, err := m.Status(ctx)
 	if err != nil {
 		return MigrationResult{}, err
@@ -153,31 +162,24 @@ func (m *Migrator) Up(ctx context.Context) (MigrationResult, error) {
 	if err != nil {
 		var partial *goose.PartialError
 		if !errors.As(err, &partial) {
-			return MigrationResult{}, fmt.Errorf("apply migrations: %w", err)
+			result := migrationResult(status.Current, appliedMigrations(results))
+			return result, fmt.Errorf("apply migrations: %w", err)
 		}
 
-		to, versionErr := m.provider.GetDBVersion(ctx)
-		if versionErr != nil {
-			return MigrationResult{}, fmt.Errorf("get database version after partial migration: %w", versionErr)
-		}
 		applied := appliedMigrations(partial.Applied)
+		result := migrationResult(status.Current, applied)
 		failure := &MigrationFailure{
 			From:    status.Current,
 			Target:  status.Target,
-			To:      to,
+			To:      result.To,
 			Applied: applied,
 			Failed:  appliedMigration(partial.Failed),
 			Err:     partial.Err,
 		}
-		return MigrationResult{From: status.Current, To: to, Applied: applied}, failure
+		return result, failure
 	}
 
-	applied := appliedMigrations(results)
-	to, err := m.provider.GetDBVersion(ctx)
-	if err != nil {
-		return MigrationResult{}, fmt.Errorf("get database version after migrations: %w", err)
-	}
-	return MigrationResult{From: status.Current, To: to, Applied: applied}, nil
+	return migrationResult(status.Current, appliedMigrations(results)), nil
 }
 
 func migrationInfo(source *goose.Source) MigrationInfo {
@@ -200,6 +202,16 @@ func appliedMigrations(results []*goose.MigrationResult) []AppliedMigration {
 		applied = append(applied, appliedMigration(result))
 	}
 	return applied
+}
+
+func migrationResult(from int64, applied []AppliedMigration) MigrationResult {
+	to := from
+	for _, migration := range applied {
+		if migration.Version > to {
+			to = migration.Version
+		}
+	}
+	return MigrationResult{From: from, To: to, Applied: applied}
 }
 
 func MigrateContext(ctx context.Context, db *sql.DB) error {
