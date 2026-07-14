@@ -6,6 +6,7 @@ require (
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/fumiama/go-docx v0.0.0-20250506085032-0c30fd09304b
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/gofrs/flock v0.13.0
 	github.com/goodsign/monday v1.0.2
 	github.com/gorilla/csrf v1.7.3
 	github.com/lukasjarosch/go-docx v0.5.0
