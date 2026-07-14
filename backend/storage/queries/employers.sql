@@ -45,9 +45,9 @@ FROM employers
 WHERE id = ?;
 
 -- name: DeactivateEmployer :one
--- After 003 added `status` to employers, this flips the soft-delete flag
--- and records the transition in the audit log. Idempotent: a no-op when
--- status is already 'inactive' (no rows updated).
+-- Marks an employer inactive as a soft delete; the service records the
+-- transition in the audit log. Idempotent: a no-op when status is already
+-- 'inactive' (no rows updated).
 UPDATE employers
 SET status = 'inactive', updated_at = ?
 WHERE id = ? AND status = 'active'

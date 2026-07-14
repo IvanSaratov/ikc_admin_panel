@@ -62,9 +62,9 @@ type DeactivateEmployerParams struct {
 	ID        int64  `json:"id"`
 }
 
-// After 003 added `status` to employers, this flips the soft-delete flag
-// and records the transition in the audit log. Idempotent: a no-op when
-// status is already 'inactive' (no rows updated).
+// Marks an employer inactive as a soft delete; the service records the
+// transition in the audit log. Idempotent: a no-op when status is already
+// 'inactive' (no rows updated).
 func (q *Queries) DeactivateEmployer(ctx context.Context, arg DeactivateEmployerParams) (Employer, error) {
 	row := q.db.QueryRowContext(ctx, deactivateEmployer, arg.UpdatedAt, arg.ID)
 	var i Employer
