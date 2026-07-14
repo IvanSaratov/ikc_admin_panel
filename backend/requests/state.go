@@ -2,7 +2,7 @@ package requests
 
 // requestRow status values for the request_rows.status column.
 //
-// Mirrors the CHECK constraint in migrations/001_initial_schema.sql
+// Mirrors the CHECK constraint in the released baseline schema
 // (pending | parsed | invalid | applied | skipped). Keep this list and
 // the schema constraint in sync — the schema is the source of truth,
 // the constants here exist for clarity and for compile-time checks in

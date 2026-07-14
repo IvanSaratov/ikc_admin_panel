@@ -344,7 +344,7 @@ func buildFixture() *fixture {
 	// 9 action_log entries spanning every actor type
 	fx.actionLog = []actionLogSpec{
 		{"system", "db_migrate", "system", "",
-			"initial migrations 0001-0004 applied", ago(45 * 24 * time.Hour)},
+			"released baseline schema applied", ago(45 * 24 * time.Hour)},
 		{"import", "xlsx_import_received", "import", "im0",
 			"operator uploaded sample_request_2026-05-12.xlsx (sha256 matches)", ago(40 * 24 * time.Hour)},
 		{"import", "xlsx_rows_applied", "client_request", "r0",

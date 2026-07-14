@@ -7,7 +7,7 @@ package protocols
 import "errors"
 
 // ProtocolStatus is the typed lifecycle vocabulary for protocols. Mirrors
-// the CHECK constraint on protocols.status in 001_initial_schema.sql.
+// the CHECK constraint on protocols.status in the released baseline schema.
 type ProtocolStatus string
 
 const (

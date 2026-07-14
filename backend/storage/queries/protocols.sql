@@ -78,7 +78,7 @@ RETURNING id, program_group_id, status, training_start_date, training_end_date,
 -- name: MaxAnnualSequenceForGroupYear :one
 -- Returns the highest annual_sequence_number already used for a (group, year,
 -- suffix) triple. The COALESCE on protocol_suffix is mirrored on the unique
--- index in 002_schema_cleanup so the same seq can be reused across suffixes.
+-- index in the released baseline schema so the same seq can be reused across suffixes.
 -- Returns NULL when no fixed protocol exists yet for that triple; the
 -- service treats NULL as 0 and adds 1 to assign the next slot.
 SELECT MAX(annual_sequence_number) AS max_seq

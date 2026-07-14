@@ -85,8 +85,8 @@ func FormatProtocolNumber(year, month int, seq int64, suffix string) string {
 // to hold a transaction so the read-then-write isn't raced. Returns 1 when
 // no fixed protocol exists yet for that triple.
 //
-// The COALESCE on the suffix mirrors the unique index from
-// 002_schema_cleanup, so an empty suffix slots in next to a "1" suffix
+// The COALESCE on the suffix mirrors the baseline schema's unique index,
+// so an empty suffix slots in next to a "1" suffix
 // without colliding (each gets its own sequence number per group/year).
 //
 // The MaxAnnualSequenceForGroupYear query returns interface{} because sqlc
