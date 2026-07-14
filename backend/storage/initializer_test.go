@@ -42,6 +42,47 @@ func TestInitializerPreparesFreshDatabaseWithoutBackup(t *testing.T) {
 	}
 }
 
+func TestInitializerReportsConfigurationFailureAfterIdentityAndStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "readonly-current.db")
+	raw, err := sql.Open(sqliteDriverName, path)
+	if err != nil {
+		t.Fatalf("open raw database: %v", err)
+	}
+	migrator := newInitializerTestMigrator(t, raw, false)
+	if _, err := migrator.Up(ctx); err != nil {
+		_ = raw.Close()
+		t.Fatalf("migrate current fixture: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close current fixture: %v", err)
+	}
+
+	readonly, err := OpenReadOnly(ctx, path)
+	if err != nil {
+		t.Fatalf("open current fixture read-only: %v", err)
+	}
+	defer readonly.Close()
+	readonlyMigrator := newInitializerTestMigrator(t, readonly, false)
+	initializer := NewInitializer(readonly, readonlyMigrator, backupCreatorFunc(func(context.Context, *sql.DB, int64) (string, error) {
+		t.Fatal("backup called for current schema")
+		return "", nil
+	}))
+	for attempt := 1; attempt <= 2; attempt++ {
+		result, err := initializer.Prepare(ctx)
+		if err == nil || !strings.Contains(err.Error(), "configure SQLite database for preparation") {
+			t.Fatalf("Prepare(attempt %d) error = %v, want configuration failure", attempt, err)
+		}
+		assertMigrationStatus(t, result.Before, 1, 1, nil)
+		assertMigrationStatus(t, result.After, 1, 1, nil)
+		if result.Identity.ApplicationID != SQLiteApplicationID || !result.Identity.HasMigrationHistory {
+			t.Fatalf("Prepare(attempt %d) Identity = %+v, want recognized current database", attempt, result.Identity)
+		}
+	}
+}
+
 func TestInitializerBacksUpPopulatedDatabaseBeforeUpgrade(t *testing.T) {
 	t.Parallel()
 

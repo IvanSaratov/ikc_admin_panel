@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/url"
 	"os"
@@ -24,6 +25,111 @@ func TestExistingDatabaseDSNUsesReadWriteExistingMode(t *testing.T) {
 	}
 	if pragmas := parsed.Query()["_pragma"]; len(pragmas) != 0 {
 		t.Fatalf("pre-validation pragmas = %q, want none", pragmas)
+	}
+}
+
+func TestPreparationDatabaseDSNUsesReadWriteCreateModeWithoutPragmas(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		path     string
+		wantPath string
+	}{
+		{name: "POSIX", path: "/var/lib/IKC app.db", wantPath: "/var/lib/IKC app.db"},
+		{name: "Windows drive", path: "C:/Program Data/IKC/app.db", wantPath: "/C:/Program Data/IKC/app.db"},
+		{name: "UNC", path: "//server/share/IKC app.db", wantPath: "//server/share/IKC app.db"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dsn := preparationDatabaseDSN(test.path)
+			parsed, err := url.Parse(dsn)
+			if err != nil {
+				t.Fatalf("parse DSN %q: %v", dsn, err)
+			}
+			if parsed.Scheme != "file" || parsed.Path != test.wantPath {
+				t.Fatalf("parsed DSN = scheme %q, path %q; want file, %q", parsed.Scheme, parsed.Path, test.wantPath)
+			}
+			if got := parsed.Query().Get("mode"); got != "rwc" {
+				t.Fatalf("mode = %q, want rwc", got)
+			}
+			if pragmas := parsed.Query()["_pragma"]; len(pragmas) != 0 {
+				t.Fatalf("pre-validation pragmas = %q, want none", pragmas)
+			}
+		})
+	}
+}
+
+func TestInspectExistingEmbeddedPreparationRejectsMaterializedFreshSQLite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "materialized-fresh.db")
+	raw, err := sql.Open(sqliteDriverName, path)
+	if err != nil {
+		t.Fatalf("open raw database: %v", err)
+	}
+	if _, err := raw.ExecContext(ctx, `PRAGMA user_version = 1`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("materialize database: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw database: %v", err)
+	}
+	owner, err := AcquireOwnerLock(path)
+	if err != nil {
+		t.Fatalf("acquire owner: %v", err)
+	}
+	defer owner.Close()
+	readonly, err := OpenOwnedReadOnly(ctx, owner.DatabasePath())
+	if err != nil {
+		t.Fatalf("open owned read-only: %v", err)
+	}
+	defer readonly.Close()
+	_, _, err = InspectExistingEmbeddedPreparation(ctx, readonly)
+	if !errors.Is(err, ErrSchemaNotReady) {
+		t.Fatalf("inspection error = %v, want ErrSchemaNotReady", err)
+	}
+}
+
+func TestInspectExistingEmbeddedPreparationAcceptsExactGooseBootstrap(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "retryable-bootstrap.db")
+	raw, err := sql.Open(sqliteDriverName, path)
+	if err != nil {
+		t.Fatalf("open raw database: %v", err)
+	}
+	if _, err := raw.ExecContext(ctx, gooseBootstrapTableSQL); err != nil {
+		_ = raw.Close()
+		t.Fatalf("create Goose bootstrap table: %v", err)
+	}
+	if _, err := raw.ExecContext(ctx, `INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, 1)`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("insert Goose bootstrap row: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw database: %v", err)
+	}
+	owner, err := AcquireOwnerLock(path)
+	if err != nil {
+		t.Fatalf("acquire owner: %v", err)
+	}
+	defer owner.Close()
+	readonly, err := OpenOwnedReadOnly(ctx, owner.DatabasePath())
+	if err != nil {
+		t.Fatalf("open owned read-only: %v", err)
+	}
+	defer readonly.Close()
+	identity, status, err := InspectExistingEmbeddedPreparation(ctx, readonly)
+	if err != nil {
+		t.Fatalf("inspection error = %v", err)
+	}
+	if identity.Fresh || identity.ApplicationID != 0 || !identity.HasMigrationHistory {
+		t.Fatalf("identity = %+v, want exact retryable bootstrap", identity)
+	}
+	if status.Current != 0 || status.Target != 1 || len(status.Pending) != 1 {
+		t.Fatalf("status = %+v, want current 0 target 1 pending 1", status)
 	}
 }
 
@@ -175,6 +281,102 @@ func TestOpenExistingRejectsRetargetedCanonicalEntryBeforeConfigure(t *testing.T
 	}
 }
 
+func TestOpenForPreparationRejectsRetargetedCanonicalEntryBeforeConfigure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("final-entry symlink replacement requires elevated Windows privileges")
+	}
+
+	ctx := context.Background()
+	root := t.TempDir()
+	realPath := filepath.Join(root, "owned.db")
+	alternatePath := filepath.Join(root, "alternate.db")
+	createSQLiteWithJournalMode(t, ctx, realPath, "DELETE")
+	createSQLiteWithJournalMode(t, ctx, alternatePath, "DELETE")
+
+	owner, err := AcquireOwnerLock(realPath)
+	if err != nil {
+		t.Fatalf("acquire owner: %v", err)
+	}
+	defer owner.Close()
+	expectedPath := owner.DatabasePath()
+	if err := os.Remove(realPath); err != nil {
+		t.Fatalf("remove owned database entry: %v", err)
+	}
+	if err := os.Symlink(alternatePath, realPath); err != nil {
+		t.Fatalf("retarget owned database entry: %v", err)
+	}
+
+	db, err := OpenForPreparation(ctx, expectedPath)
+	if db != nil {
+		_ = db.Close()
+		t.Fatal("OpenForPreparation() database != nil, want retarget rejection")
+	}
+	if err == nil || !strings.Contains(err.Error(), "differs from owned database path") {
+		t.Fatalf("OpenForPreparation() error = %v, want owned-path mismatch", err)
+	}
+	assertSQLiteJournalMode(t, ctx, alternatePath, "delete")
+}
+
+func TestOpenOwnedReadOnlyRejectsRetargetedCanonicalEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("final-entry symlink replacement requires elevated Windows privileges")
+	}
+
+	ctx := context.Background()
+	root := t.TempDir()
+	realPath := filepath.Join(root, "owned.db")
+	alternatePath := filepath.Join(root, "alternate.db")
+	createSQLiteWithJournalMode(t, ctx, realPath, "DELETE")
+	createSQLiteWithJournalMode(t, ctx, alternatePath, "DELETE")
+	owner, err := AcquireOwnerLock(realPath)
+	if err != nil {
+		t.Fatalf("acquire owner: %v", err)
+	}
+	defer owner.Close()
+	expectedPath := owner.DatabasePath()
+	if err := os.Remove(realPath); err != nil {
+		t.Fatalf("remove owned database entry: %v", err)
+	}
+	if err := os.Symlink(alternatePath, realPath); err != nil {
+		t.Fatalf("retarget owned database entry: %v", err)
+	}
+
+	db, err := OpenOwnedReadOnly(ctx, expectedPath)
+	if db != nil {
+		_ = db.Close()
+		t.Fatal("OpenOwnedReadOnly() database != nil, want retarget rejection")
+	}
+	if err == nil || !strings.Contains(err.Error(), "differs from owned database path") {
+		t.Fatalf("OpenOwnedReadOnly() error = %v, want owned-path mismatch", err)
+	}
+	assertSQLiteJournalMode(t, ctx, alternatePath, "delete")
+}
+
+func TestOpenForPreparationCreatesOwnedDatabaseWithoutConfiguringIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "fresh.db")
+	owner, err := AcquireOwnerLock(path)
+	if err != nil {
+		t.Fatalf("acquire owner: %v", err)
+	}
+	defer owner.Close()
+	db, err := OpenForPreparation(ctx, owner.DatabasePath())
+	if err != nil {
+		t.Fatalf("OpenForPreparation() error = %v", err)
+	}
+	defer db.Close()
+
+	var journalMode string
+	if err := db.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&journalMode); err != nil {
+		t.Fatalf("read journal mode: %v", err)
+	}
+	if strings.ToLower(journalMode) != "delete" {
+		t.Fatalf("journal mode = %q, want unconfigured delete", journalMode)
+	}
+}
+
 func TestOpenExistingRejectsInvalidExpectedPath(t *testing.T) {
 	t.Parallel()
 
@@ -213,5 +415,21 @@ func createSQLiteWithJournalMode(t *testing.T, ctx context.Context, path, mode s
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close SQLite database: %v", err)
+	}
+}
+
+func assertSQLiteJournalMode(t *testing.T, ctx context.Context, path, want string) {
+	t.Helper()
+	readonly, err := OpenReadOnly(ctx, path)
+	if err != nil {
+		t.Fatalf("open database read-only: %v", err)
+	}
+	defer readonly.Close()
+	var journalMode string
+	if err := readonly.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&journalMode); err != nil {
+		t.Fatalf("read journal mode: %v", err)
+	}
+	if strings.ToLower(journalMode) != strings.ToLower(want) {
+		t.Fatalf("journal mode = %q, want %q", journalMode, want)
 	}
 }

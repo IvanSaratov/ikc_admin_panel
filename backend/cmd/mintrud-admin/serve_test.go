@@ -87,6 +87,10 @@ func TestRunServeRejectsTooNewSchemaBeforeStartingHTTP(t *testing.T) {
 	if _, err := migrator.Up(ctx); err != nil {
 		t.Fatalf("migrate too-new database: %v", err)
 	}
+	var journalMode string
+	if err := db.QueryRowContext(ctx, `PRAGMA journal_mode = DELETE`).Scan(&journalMode); err != nil {
+		t.Fatalf("set too-new journal mode: %v", err)
+	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -103,6 +107,7 @@ func TestRunServeRejectsTooNewSchemaBeforeStartingHTTP(t *testing.T) {
 	if observed.FilterMessage("Mintrud Admin listening").Len() != 0 {
 		t.Fatal("too-new startup reached HTTP listening stage")
 	}
+	assertCommandDatabaseJournalMode(t, ctx, dbPath, "delete")
 	owner, err := storage.AcquireOwnerLock(dbPath)
 	if err != nil {
 		t.Fatalf("owner lock remains held after failed startup: %v", err)
@@ -167,6 +172,7 @@ func TestRunServeHoldsOwnerLockUntilShutdown(t *testing.T) {
 		t.Fatalf("acquire owner after shutdown: %v", err)
 	}
 	after.Close()
+	assertCommandDatabaseJournalMode(t, context.Background(), dbPath, "wal")
 }
 
 func TestRunServeReleasesOwnerLockWhenBootstrapFails(t *testing.T) {

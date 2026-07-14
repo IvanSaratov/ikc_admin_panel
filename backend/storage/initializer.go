@@ -31,6 +31,12 @@ type PreparationResult struct {
 	Identity   DatabaseIdentity
 }
 
+type preparationInspection struct {
+	identity           DatabaseIdentity
+	status             MigrationStatus
+	retryableBootstrap bool
+}
+
 type Initializer struct {
 	db       *sql.DB
 	migrator *Migrator
@@ -84,46 +90,18 @@ func (i *Initializer) Prepare(ctx context.Context) (PreparationResult, error) {
 		}
 	}
 
-	identity, identityErr := InspectDatabaseIdentity(ctx, i.db)
-	result.Identity = identity
-	retryableBootstrap := false
-	if identityErr != nil {
-		if errors.Is(identityErr, ErrUnrecognizedDatabase) {
-			var bootstrapErr error
-			retryableBootstrap, bootstrapErr = inspectRetryableGooseBootstrap(ctx, i.db)
-			if bootstrapErr != nil {
-				return result, errors.Join(
-					fmt.Errorf("inspect SQLite database identity before preparation: %w", identityErr),
-					fmt.Errorf("inspect failed Goose bootstrap state: %w", bootstrapErr),
-				)
-			}
-		}
-		if !retryableBootstrap {
-			return result, fmt.Errorf("inspect SQLite database identity before preparation: %w", identityErr)
-		}
-	}
-
-	status, err := i.preparationStatus(ctx, identity, retryableBootstrap)
+	inspection, err := inspectPreparation(ctx, i.db, i.migrator)
+	result.Identity = inspection.identity
+	result.Before = inspection.status
+	result.After = inspection.status
+	result.Migration = MigrationResult{From: inspection.status.Current, To: inspection.status.Current}
 	if err != nil {
 		return result, err
 	}
-	result.Before = status
-	result.After = status
-	result.Migration = MigrationResult{From: status.Current, To: status.Current}
-
-	if status.Current > status.Target {
-		return result, fmt.Errorf(
-			"%w: current version %d, target version %d",
-			ErrSchemaTooNew,
-			status.Current,
-			status.Target,
-		)
-	}
-	if !identity.Fresh && !retryableBootstrap && status.Current == 0 {
-		return result, fmt.Errorf(
-			"%w: recognized non-fresh database has Goose version 0",
-			ErrSchemaNotReady,
-		)
+	identity := inspection.identity
+	status := inspection.status
+	if err := configure(ctx, i.db); err != nil {
+		return result, fmt.Errorf("configure SQLite database for preparation: %w", err)
 	}
 	if len(status.Pending) == 0 {
 		if err := RequireCurrentSchema(identity, status); err != nil {
@@ -171,6 +149,71 @@ func (i *Initializer) Prepare(ctx context.Context) (PreparationResult, error) {
 		return i.failAfterMutation(ctx, result, fmt.Errorf("validate prepared SQLite schema: %w", err))
 	}
 	return result, nil
+}
+
+// InspectExistingEmbeddedPreparation performs the same read-only identity and
+// migration-version acceptance checks as Initializer.Prepare, but rejects a
+// materialized schema-less SQLite file. Existing candidates are accepted only
+// when they are a recognized application database or the exact retryable Goose
+// version-zero bootstrap shell.
+func InspectExistingEmbeddedPreparation(ctx context.Context, db *sql.DB) (DatabaseIdentity, MigrationStatus, error) {
+	migrator, err := NewEmbeddedMigrator(db)
+	if err != nil {
+		return DatabaseIdentity{}, MigrationStatus{}, fmt.Errorf("create embedded SQLite inspection migrator: %w", err)
+	}
+	inspection, err := inspectPreparation(ctx, db, migrator)
+	if err != nil {
+		return inspection.identity, inspection.status, err
+	}
+	if inspection.identity.Fresh {
+		return inspection.identity, inspection.status, fmt.Errorf(
+			"%w: existing SQLite file has no application schema",
+			ErrSchemaNotReady,
+		)
+	}
+	return inspection.identity, inspection.status, nil
+}
+
+func inspectPreparation(ctx context.Context, db *sql.DB, migrator *Migrator) (preparationInspection, error) {
+	var inspection preparationInspection
+	identity, identityErr := InspectDatabaseIdentity(ctx, db)
+	inspection.identity = identity
+	if identityErr != nil {
+		if errors.Is(identityErr, ErrUnrecognizedDatabase) {
+			var bootstrapErr error
+			inspection.retryableBootstrap, bootstrapErr = inspectRetryableGooseBootstrap(ctx, db)
+			if bootstrapErr != nil {
+				return inspection, errors.Join(
+					fmt.Errorf("inspect SQLite database identity before preparation: %w", identityErr),
+					fmt.Errorf("inspect failed Goose bootstrap state: %w", bootstrapErr),
+				)
+			}
+		}
+		if !inspection.retryableBootstrap {
+			return inspection, fmt.Errorf("inspect SQLite database identity before preparation: %w", identityErr)
+		}
+	}
+
+	status, err := preparationStatus(ctx, migrator, identity, inspection.retryableBootstrap)
+	inspection.status = status
+	if err != nil {
+		return inspection, err
+	}
+	if status.Current > status.Target {
+		return inspection, fmt.Errorf(
+			"%w: current version %d, target version %d",
+			ErrSchemaTooNew,
+			status.Current,
+			status.Target,
+		)
+	}
+	if !identity.Fresh && !inspection.retryableBootstrap && status.Current == 0 {
+		return inspection, fmt.Errorf(
+			"%w: recognized non-fresh database has Goose version 0",
+			ErrSchemaNotReady,
+		)
+	}
+	return inspection, nil
 }
 
 func (i *Initializer) validateDependencies(ctx context.Context) error {
@@ -224,17 +267,17 @@ func (i *Initializer) release() {
 	<-i.gate
 }
 
-func (i *Initializer) preparationStatus(ctx context.Context, identity DatabaseIdentity, retryableBootstrap bool) (MigrationStatus, error) {
+func preparationStatus(ctx context.Context, migrator *Migrator, identity DatabaseIdentity, retryableBootstrap bool) (MigrationStatus, error) {
 	if identity.Fresh {
-		return i.migrator.Catalog(), nil
+		return migrator.Catalog(), nil
 	}
 
-	status, err := i.migrator.Status(ctx)
+	status, err := migrator.Status(ctx)
 	if err != nil {
 		return MigrationStatus{}, fmt.Errorf("inspect SQLite migration status before preparation: %w", err)
 	}
 	if retryableBootstrap {
-		catalog := i.migrator.Catalog()
+		catalog := migrator.Catalog()
 		if !bootstrapStatusMatchesCatalog(status, catalog) {
 			return MigrationStatus{}, fmt.Errorf(
 				"%w: failed Goose bootstrap status %+v differs from migration catalog %+v",

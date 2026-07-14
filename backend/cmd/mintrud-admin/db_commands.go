@@ -90,7 +90,13 @@ func withOwnedDatabase(
 	policy databaseOpenPolicy,
 	fn func(*sql.DB, string) error,
 ) (retErr error) {
+	preOwnershipState := databaseFileMissing
 	if policy == databaseMayCreate {
+		var err error
+		preOwnershipState, err = inspectDatabaseFile(path)
+		if err != nil {
+			return err
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("create data directory: %w", err)
 		}
@@ -107,19 +113,42 @@ func withOwnedDatabase(
 		if err := requireExistingSQLiteDatabase(ctx, ownedPath); err != nil {
 			return err
 		}
+	} else {
+		currentState, err := inspectDatabaseFile(ownedPath)
+		if err != nil {
+			return err
+		}
+		if preOwnershipState == databaseFileSQLite && currentState != databaseFileSQLite {
+			return fmt.Errorf("%w: database file changed while ownership was acquired", storage.ErrSchemaNotReady)
+		}
+		if currentState == databaseFileSQLite {
+			if err := inspectExistingPreparationCandidate(ctx, ownedPath); err != nil {
+				return err
+			}
+		}
 	}
 
 	var db *sql.DB
 	if policy == databaseMustExist {
 		db, err = storage.OpenExisting(ctx, ownedPath)
 	} else {
-		db, err = storage.Open(ctx, ownedPath)
+		db, err = storage.OpenForPreparation(ctx, ownedPath)
 	}
 	if err != nil {
 		return err
 	}
 	defer func() { retErr = errors.Join(retErr, db.Close()) }()
 	return fn(db, ownedPath)
+}
+
+func inspectExistingPreparationCandidate(ctx context.Context, ownedPath string) (retErr error) {
+	db, err := storage.OpenOwnedReadOnly(ctx, ownedPath)
+	if err != nil {
+		return err
+	}
+	defer func() { retErr = errors.Join(retErr, db.Close()) }()
+	_, _, err = storage.InspectExistingEmbeddedPreparation(ctx, db)
+	return err
 }
 
 func requireExistingSQLiteDatabase(ctx context.Context, path string) error {

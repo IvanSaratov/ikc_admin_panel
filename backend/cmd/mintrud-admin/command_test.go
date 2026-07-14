@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -36,6 +37,7 @@ func TestRunCommandMigrateThenStatus(t *testing.T) {
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("database stat: %v", err)
 	}
+	assertCommandDatabaseJournalMode(t, ctx, dbPath, "wal")
 
 	var statusOut bytes.Buffer
 	if err := runCommand(ctx, []string{"db", "status"}, &statusOut, zap.NewNop()); err != nil {
@@ -43,6 +45,78 @@ func TestRunCommandMigrateThenStatus(t *testing.T) {
 	}
 	if !strings.Contains(statusOut.String(), "current=1 target=1 pending=0") {
 		t.Fatalf("status output = %q", statusOut.String())
+	}
+}
+
+func TestRunCommandMigrateRejectsForeignSQLiteWithoutMutation(t *testing.T) {
+	dbPath := configureCommandDatabase(t)
+	ctx := context.Background()
+	createUnconfiguredCommandSQLite(t, ctx, dbPath)
+	before, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read foreign database before migrate: %v", err)
+	}
+
+	err = runCommand(ctx, []string{"db", "migrate"}, &bytes.Buffer{}, nil)
+	if !errors.Is(err, storage.ErrUnrecognizedDatabase) {
+		t.Fatalf("db migrate error = %v, want ErrUnrecognizedDatabase", err)
+	}
+	after, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read foreign database after migrate: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("foreign database bytes changed during rejected migration")
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, statErr := os.Stat(dbPath + suffix); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("SQLite artifact %q stat error = %v, want not exist", suffix, statErr)
+		}
+	}
+	assertCommandDatabaseJournalMode(t, ctx, dbPath, "delete")
+
+	readonly, err := storage.OpenReadOnly(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("open foreign database read-only: %v", err)
+	}
+	defer readonly.Close()
+	var gooseTables int
+	if err := readonly.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_schema WHERE name = 'goose_db_version'`).Scan(&gooseTables); err != nil {
+		t.Fatalf("inspect foreign schema: %v", err)
+	}
+	if gooseTables != 0 {
+		t.Fatalf("goose table count = %d, want no schema mutation", gooseTables)
+	}
+}
+
+func createUnconfiguredCommandSQLite(t *testing.T, ctx context.Context, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw SQLite fixture: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE foreign_marker (id INTEGER PRIMARY KEY)`); err != nil {
+		_ = db.Close()
+		t.Fatalf("create foreign marker: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close raw SQLite fixture: %v", err)
+	}
+}
+
+func assertCommandDatabaseJournalMode(t *testing.T, ctx context.Context, path, want string) {
+	t.Helper()
+	db, err := storage.OpenReadOnly(ctx, path)
+	if err != nil {
+		t.Fatalf("open database read-only: %v", err)
+	}
+	defer db.Close()
+	var mode string
+	if err := db.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&mode); err != nil {
+		t.Fatalf("read journal mode: %v", err)
+	}
+	if strings.ToLower(mode) != strings.ToLower(want) {
+		t.Fatalf("journal mode = %q, want %q", mode, want)
 	}
 }
 
