@@ -129,10 +129,3 @@ func frontendAssetsDir() string {
 	}
 	return filepath.Join("..", "frontend", "dist")
 }
-
-func env(key string, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}
