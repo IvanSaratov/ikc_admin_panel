@@ -106,10 +106,11 @@ func TestAcquireOwnerLockCrossProcess(t *testing.T) {
 	if err := stdin.Close(); err != nil {
 		t.Fatalf("close helper stdin: %v", err)
 	}
-	if err := <-done; err != nil {
-		t.Fatalf("helper exit: %v", err)
-	}
+	waitErr := <-done
 	helperFinished = true
+	if waitErr != nil {
+		t.Fatalf("helper exit: %v", waitErr)
+	}
 
 	owner, err = AcquireOwnerLock(dbPath)
 	if err != nil {
