@@ -108,8 +108,6 @@ func TestMigratorRejectsSchemaNewerThanBinary(t *testing.T) {
 }
 
 func TestMigratorPreservesPartialFailureWhenContextIsCanceled(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "migrator.db")
 	db, err := Open(ctx, path)
@@ -170,7 +168,14 @@ func TestMigratorPreservesPartialFailureWhenContextIsCanceled(t *testing.T) {
 		case <-poll.C:
 		}
 	}
-	completed := <-outcomes
+	cancellationDeadline := time.NewTimer(10 * time.Second)
+	defer cancellationDeadline.Stop()
+	var completed outcome
+	select {
+	case completed = <-outcomes:
+	case <-cancellationDeadline.C:
+		t.Fatal("timed out waiting for canceled migration to return")
+	}
 	result, err := completed.result, completed.err
 
 	var failure *MigrationFailure
@@ -199,8 +204,6 @@ func TestMigratorPreservesPartialFailureWhenContextIsCanceled(t *testing.T) {
 }
 
 func TestMigratorReportsOrdinaryPartialFailure(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "migrator.db"))
 	if err != nil {
@@ -231,8 +234,6 @@ func TestMigratorReportsOrdinaryPartialFailure(t *testing.T) {
 }
 
 func TestMigratorSerializesConcurrentUpAcrossInstances(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "migrator.db")
 	db1, err := Open(ctx, path)
