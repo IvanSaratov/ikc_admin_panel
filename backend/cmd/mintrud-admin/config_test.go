@@ -28,16 +28,20 @@ func TestLoadRuntimeConfig_ResolvesRelativeDatabasePathInDevelopment(t *testing.
 }
 
 func TestLoadRuntimeConfig_RejectsRelativeDatabasePathInProductionWithoutLeakingIt(t *testing.T) {
-	rawPath := filepath.Join("private", "customer.db")
-	t.Setenv("MINTRUD_ADMIN_ENV", "prod")
-	t.Setenv("MINTRUD_ADMIN_DB", rawPath)
+	for _, environment := range []string{"prod", "production", "PROD", " prod "} {
+		t.Run(environment, func(t *testing.T) {
+			rawPath := filepath.Join("private", "customer.db")
+			t.Setenv("MINTRUD_ADMIN_ENV", environment)
+			t.Setenv("MINTRUD_ADMIN_DB", rawPath)
 
-	_, err := loadRuntimeConfig()
-	if err == nil {
-		t.Fatal("loadRuntimeConfig error = nil, want relative path rejection")
-	}
-	if strings.Contains(err.Error(), rawPath) {
-		t.Errorf("loadRuntimeConfig error contains configured database path: %q", err)
+			_, err := loadRuntimeConfig()
+			if err == nil {
+				t.Fatal("loadRuntimeConfig error = nil, want relative path rejection")
+			}
+			if strings.Contains(err.Error(), rawPath) {
+				t.Errorf("loadRuntimeConfig error contains configured database path: %q", err)
+			}
+		})
 	}
 }
 

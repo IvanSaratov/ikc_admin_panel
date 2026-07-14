@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type runtimeConfig struct {
@@ -13,8 +14,9 @@ type runtimeConfig struct {
 
 func loadRuntimeConfig() (runtimeConfig, error) {
 	rawPath := env("MINTRUD_ADMIN_DB", filepath.Join("data", "mintrud-admin.db"))
-	if env("MINTRUD_ADMIN_ENV", "dev") == "prod" && !filepath.IsAbs(rawPath) {
-		return runtimeConfig{}, fmt.Errorf("MINTRUD_ADMIN_DB must be absolute in prod")
+	environment := strings.ToLower(strings.TrimSpace(env("MINTRUD_ADMIN_ENV", "dev")))
+	if (environment == "prod" || environment == "production") && !filepath.IsAbs(rawPath) {
+		return runtimeConfig{}, fmt.Errorf("MINTRUD_ADMIN_DB must be absolute in production")
 	}
 
 	absolutePath, err := filepath.Abs(rawPath)
