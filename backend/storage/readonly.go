@@ -37,10 +37,7 @@ func readOnlyDatabaseDSN(path string) string {
 	databaseURL := url.URL{Scheme: "file"}
 	switch {
 	case strings.HasPrefix(path, "//"):
-		databaseURL.Host, path, _ = strings.Cut(strings.TrimPrefix(path, "//"), "/")
-		if path != "" {
-			databaseURL.Path = "/" + path
-		}
+		databaseURL.Path = path
 	case len(path) >= 3 && path[1] == ':' && path[2] == '/':
 		databaseURL.Path = "/" + path
 	default:

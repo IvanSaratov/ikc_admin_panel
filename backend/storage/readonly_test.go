@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -18,6 +19,7 @@ func TestReadOnlyDatabaseDSNBuildsPortableFileURI(t *testing.T) {
 		wantHost    string
 		wantPath    string
 		wantEscaped string
+		wantPrefix  string
 	}{
 		{
 			name:        "Windows drive",
@@ -28,9 +30,9 @@ func TestReadOnlyDatabaseDSNBuildsPortableFileURI(t *testing.T) {
 		{
 			name:        "UNC share",
 			path:        "//server/share/IKC app.db",
-			wantHost:    "server",
-			wantPath:    "/share/IKC app.db",
-			wantEscaped: "/share/IKC%20app.db",
+			wantPath:    "//server/share/IKC app.db",
+			wantEscaped: "//server/share/IKC%20app.db",
+			wantPrefix:  "file:////server/share/",
 		},
 		{
 			name:        "POSIX absolute",
@@ -52,6 +54,9 @@ func TestReadOnlyDatabaseDSNBuildsPortableFileURI(t *testing.T) {
 			}
 			if got := parsed.EscapedPath(); got != test.wantEscaped {
 				t.Fatalf("escaped path = %q, want %q", got, test.wantEscaped)
+			}
+			if test.wantPrefix != "" && !strings.HasPrefix(dsn, test.wantPrefix) {
+				t.Fatalf("DSN = %q, want prefix %q", dsn, test.wantPrefix)
 			}
 			query := parsed.Query()
 			if got := query.Get("mode"); got != "ro" {
