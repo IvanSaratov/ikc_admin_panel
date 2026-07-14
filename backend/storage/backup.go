@@ -117,6 +117,30 @@ func (m *BackupManager) validateSource(ctx context.Context, db *sql.DB, schemaVe
 	if schemaVersion < 0 {
 		return fmt.Errorf("backup schema version must be non-negative: %d", schemaVersion)
 	}
+	if err := m.validateDatabasePath(ctx, db); err != nil {
+		return err
+	}
+
+	if _, err := InspectDatabaseIdentity(ctx, db); err != nil {
+		return fmt.Errorf("inspect backup source identity: %w", err)
+	}
+	currentVersion, err := readGooseSchemaVersion(ctx, db)
+	if err != nil {
+		return fmt.Errorf("read backup source schema version: %w", err)
+	}
+	if currentVersion != schemaVersion {
+		return fmt.Errorf("backup schema version %d differs from current Goose version %d", schemaVersion, currentVersion)
+	}
+	return nil
+}
+
+func (m *BackupManager) validateDatabasePath(ctx context.Context, db *sql.DB) error {
+	if m == nil {
+		return errors.New("SQLite backup manager is required")
+	}
+	if db == nil {
+		return errors.New("SQLite backup source database is required")
+	}
 
 	configuredPath, err := canonicalDatabasePath(m.dbPath)
 	if err != nil {
@@ -132,17 +156,6 @@ func (m *BackupManager) validateSource(ctx context.Context, db *sql.DB, schemaVe
 	}
 	if !sameDatabasePath(configuredPath, canonicalMainPath) {
 		return fmt.Errorf("open SQLite main database %q differs from configured backup source %q", canonicalMainPath, configuredPath)
-	}
-
-	if _, err := InspectDatabaseIdentity(ctx, db); err != nil {
-		return fmt.Errorf("inspect backup source identity: %w", err)
-	}
-	currentVersion, err := readGooseSchemaVersion(ctx, db)
-	if err != nil {
-		return fmt.Errorf("read backup source schema version: %w", err)
-	}
-	if currentVersion != schemaVersion {
-		return fmt.Errorf("backup schema version %d differs from current Goose version %d", schemaVersion, currentVersion)
 	}
 	return nil
 }

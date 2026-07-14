@@ -249,6 +249,24 @@ func TestBackupManagerValidatesSourcePathAndSchemaVersion(t *testing.T) {
 	}
 }
 
+func TestBackupManagerRejectsMismatchedPathBeforeCreatingBackupDirectory(t *testing.T) {
+	t.Parallel()
+
+	ctx, sourcePath, db := newBackupTestDatabase(t)
+	manager := NewBackupManager(filepath.Join(filepath.Dir(sourcePath), "different.db"))
+
+	path, err := manager.Create(ctx, db, 1)
+	if err == nil || !strings.Contains(err.Error(), "differs") {
+		t.Fatalf("Create() = %q, %v; want mismatched source path error", path, err)
+	}
+	if path != "" {
+		t.Fatalf("Create() path = %q, want empty", path)
+	}
+	if _, err := os.Stat(manager.backupDir); !os.IsNotExist(err) {
+		t.Fatalf("backup directory os.Stat() error = %v, want not exist", err)
+	}
+}
+
 func TestBackupManagerReturnsVerifiedPathWithPruneError(t *testing.T) {
 	t.Parallel()
 
