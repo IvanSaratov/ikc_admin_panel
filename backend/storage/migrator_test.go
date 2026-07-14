@@ -233,6 +233,62 @@ func TestMigratorReportsOrdinaryPartialFailure(t *testing.T) {
 	}
 }
 
+func TestMigratorReportsPartialFailureAndRetriesWithFixedMigration(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "partial.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	broken := migrationFS(true)
+	broken["003_broken.sql"] = &fstest.MapFile{Data: []byte(`-- +goose Up
+CREATE TABLE rollback_probe (value TEXT NOT NULL);
+INSERT INTO rollback_probe(value) VALUES ('must-rollback');
+INSERT INTO missing_table(value) VALUES ('broken');
+`)}
+	brokenMigrator, err := NewMigrator(db, broken)
+	if err != nil {
+		t.Fatalf("NewMigrator(broken) error = %v", err)
+	}
+	result, err := brokenMigrator.Up(ctx)
+	var failure *MigrationFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Up(broken) error = %v, want *MigrationFailure", err)
+	}
+	assertMigrationResult(t, result, 0, 2, []int64{1, 2})
+	if failure.From != 0 || failure.To != 2 || failure.Target != 3 {
+		t.Errorf("failure versions = From %d, To %d, Target %d; want 0, 2, 3", failure.From, failure.To, failure.Target)
+	}
+	if len(failure.Applied) != 2 || failure.Failed.Version != 3 {
+		t.Errorf("failure migrations = Applied %+v, Failed %+v; want applied 1 and 2, failed 3", failure.Applied, failure.Failed)
+	}
+	var rollbackProbeTables int
+	if err := db.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'rollback_probe'`,
+	).Scan(&rollbackProbeTables); err != nil {
+		t.Fatalf("inspect rollback probe: %v", err)
+	}
+	if rollbackProbeTables != 0 {
+		t.Fatalf("rollback probe table count = %d, want 0", rollbackProbeTables)
+	}
+
+	fixed := migrationFS(true)
+	fixed["003_add_item_note.sql"] = &fstest.MapFile{Data: []byte(`-- +goose Up
+ALTER TABLE items ADD COLUMN note TEXT;
+`)}
+	fixedMigrator, err := NewMigrator(db, fixed)
+	if err != nil {
+		t.Fatalf("NewMigrator(fixed) error = %v", err)
+	}
+	retry, err := fixedMigrator.Up(ctx)
+	if err != nil {
+		t.Fatalf("Up(fixed) error = %v", err)
+	}
+	assertMigrationResult(t, retry, 2, 3, []int64{3})
+}
+
 func TestMigratorSerializesConcurrentUpAcrossInstances(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "migrator.db")

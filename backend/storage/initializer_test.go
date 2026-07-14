@@ -66,7 +66,7 @@ func TestInitializerBacksUpPopulatedDatabaseBeforeUpgrade(t *testing.T) {
 	if result.BackupPath == "" {
 		t.Fatal("Prepare() BackupPath is empty, want verified pre-migration backup")
 	}
-	assertInitializerBackup(t, ctx, result.BackupPath)
+	assertInitializerBackup(t, ctx, result.BackupPath, "preserved")
 
 	var name, status string
 	if err := db.QueryRowContext(ctx, `SELECT name, status FROM items`).Scan(&name, &status); err != nil {
@@ -74,6 +74,115 @@ func TestInitializerBacksUpPopulatedDatabaseBeforeUpgrade(t *testing.T) {
 	}
 	if name != "preserved" || status != "active" {
 		t.Fatalf("upgraded item = (%q, %q), want (preserved, active)", name, status)
+	}
+}
+
+func TestInitializerReturnsRecoveryBackupOnFailedUpgrade(t *testing.T) {
+	ctx := context.Background()
+	dbPath, db := openInitializerTestDatabase(t, ctx)
+	v1 := newInitializerTestMigrator(t, db, false)
+	if _, err := v1.Up(ctx); err != nil {
+		t.Fatalf("v1 Up() error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO items (name) VALUES ('protected')`); err != nil {
+		t.Fatalf("seed item: %v", err)
+	}
+
+	brokenFS := migrationFS(false)
+	brokenFS["002_broken.sql"] = &fstest.MapFile{Data: []byte(`-- +goose Up
+INSERT INTO missing_table(value) VALUES ('broken');
+`)}
+	broken := newInitializerTestMigratorFS(t, db, brokenFS)
+	result, err := NewInitializer(db, broken, NewBackupManager(dbPath)).Prepare(ctx)
+	var failure *MigrationFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Prepare() error = %v, want *MigrationFailure", err)
+	}
+	if result.BackupPath == "" {
+		t.Fatal("Prepare() BackupPath is empty after failed upgrade")
+	}
+	assertInitializerBackup(t, ctx, result.BackupPath, "protected")
+	assertMigrationStatus(t, result.After, 1, 2, []MigrationInfo{{Version: 2, Name: "002_broken.sql"}})
+	assertInitializerSchemaVersion(t, ctx, db, 1)
+	var protectedName string
+	if err := db.QueryRowContext(ctx, `SELECT name FROM items WHERE id = 1`).Scan(&protectedName); err != nil {
+		t.Fatalf("read item after failed upgrade: %v", err)
+	}
+	if protectedName != "protected" {
+		t.Fatalf("item after failed upgrade = %q, want protected", protectedName)
+	}
+}
+
+func TestPreMigrationBackupRestoresPreviousSchemaAndData(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "restore.db")
+	db, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	v1 := newInitializerTestMigrator(t, db, false)
+	if _, err := v1.Up(ctx); err != nil {
+		_ = db.Close()
+		t.Fatalf("v1 Up() error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO items (name) VALUES ('restore-me')`); err != nil {
+		_ = db.Close()
+		t.Fatalf("seed item: %v", err)
+	}
+	v2 := newInitializerTestMigrator(t, db, true)
+	prepared, err := NewInitializer(db, v2, NewBackupManager(dbPath)).Prepare(ctx)
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close upgraded database: %v", err)
+	}
+
+	backupBytes, err := os.ReadFile(prepared.BackupPath)
+	if err != nil {
+		t.Fatalf("read recovery backup: %v", err)
+	}
+	for _, path := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("remove upgraded database file %s: %v", filepath.Base(path), err)
+		}
+	}
+	if err := os.WriteFile(dbPath, backupBytes, 0o600); err != nil {
+		t.Fatalf("restore recovery backup: %v", err)
+	}
+
+	restored, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("open restored database: %v", err)
+	}
+	t.Cleanup(func() { _ = restored.Close() })
+	restoredMigrator := newInitializerTestMigrator(t, restored, false)
+	status, err := restoredMigrator.Status(ctx)
+	if err != nil {
+		t.Fatalf("restored Status() error = %v", err)
+	}
+	assertMigrationStatus(t, status, 1, 1, nil)
+	var name string
+	if err := restored.QueryRowContext(ctx, `SELECT name FROM items WHERE id = 1`).Scan(&name); err != nil {
+		t.Fatalf("read restored item: %v", err)
+	}
+	if name != "restore-me" {
+		t.Fatalf("restored item name = %q, want restore-me", name)
+	}
+	var upgradedColumns int
+	if err := restored.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*) FROM pragma_table_info('items') WHERE name = 'status'`,
+	).Scan(&upgradedColumns); err != nil {
+		t.Fatalf("inspect restored items schema: %v", err)
+	}
+	if upgradedColumns != 0 {
+		t.Fatalf("restored status column count = %d, want 0", upgradedColumns)
+	}
+	if err := QuickCheck(ctx, restored); err != nil {
+		t.Fatalf("QuickCheck(restored) error = %v", err)
 	}
 }
 
@@ -202,7 +311,7 @@ func TestInitializerPreservesVerifiedBackupPathOnPruneFailure(t *testing.T) {
 	if result.BackupPath == "" {
 		t.Fatal("Prepare() BackupPath is empty after verified backup and prune failure")
 	}
-	assertInitializerBackup(t, ctx, result.BackupPath)
+	assertInitializerBackup(t, ctx, result.BackupPath, "preserved")
 	assertMigrationStatus(t, result.After, 1, 2, []MigrationInfo{{Version: 2, Name: "002_item_status.sql"}})
 	assertInitializerSchemaVersion(t, ctx, db, 1)
 }
@@ -841,7 +950,7 @@ func assertInitializerSchemaVersion(t *testing.T, ctx context.Context, db *sql.D
 	}
 }
 
-func assertInitializerBackup(t *testing.T, ctx context.Context, path string) {
+func assertInitializerBackup(t *testing.T, ctx context.Context, path, wantName string) {
 	t.Helper()
 
 	backup, err := OpenReadOnly(ctx, path)
@@ -857,7 +966,7 @@ func assertInitializerBackup(t *testing.T, ctx context.Context, path string) {
 	if err := backup.QueryRowContext(ctx, `SELECT name FROM items`).Scan(&name); err != nil {
 		t.Fatalf("read backup item: %v", err)
 	}
-	if name != "preserved" {
-		t.Fatalf("backup item = %q, want preserved", name)
+	if name != wantName {
+		t.Fatalf("backup item = %q, want %q", name, wantName)
 	}
 }
