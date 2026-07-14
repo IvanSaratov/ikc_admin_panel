@@ -86,6 +86,192 @@ func TestRunCommandStatusDoesNotModifyEmptyDatabaseFile(t *testing.T) {
 	}
 }
 
+func TestRunCommandExistingDatabaseActionsDoNotCreateMissingArtifacts(t *testing.T) {
+	for _, action := range []string{"verify", "backup"} {
+		t.Run(action, func(t *testing.T) {
+			root := t.TempDir()
+			dbPath := filepath.Join(root, "missing-parent", "commands.db")
+			t.Setenv("MINTRUD_ADMIN_ENV", "dev")
+			t.Setenv("MINTRUD_ADMIN_DB", dbPath)
+
+			err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+			if !errors.Is(err, storage.ErrSchemaNotReady) {
+				t.Fatalf("db %s error = %v, want ErrSchemaNotReady", action, err)
+			}
+			for _, path := range []string{filepath.Dir(dbPath), dbPath, dbPath + ".lock"} {
+				if _, statErr := os.Lstat(path); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("artifact %q stat error = %v, want not exist", path, statErr)
+				}
+			}
+		})
+	}
+}
+
+func TestRunCommandExistingDatabaseActionsDoNotLockEmptyOrInvalidFiles(t *testing.T) {
+	for _, fixture := range []struct {
+		name    string
+		content []byte
+		wantErr error
+	}{
+		{name: "empty", wantErr: storage.ErrSchemaNotReady},
+		{name: "not-sqlite", content: []byte("this is not a SQLite database"), wantErr: storage.ErrUnrecognizedDatabase},
+	} {
+		for _, action := range []string{"verify", "backup"} {
+			t.Run(fixture.name+"/"+action, func(t *testing.T) {
+				dbPath := configureCommandDatabase(t)
+				if err := os.WriteFile(dbPath, fixture.content, 0o600); err != nil {
+					t.Fatalf("create fixture: %v", err)
+				}
+
+				err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+				if !errors.Is(err, fixture.wantErr) {
+					t.Fatalf("db %s error = %v, want %v", action, err, fixture.wantErr)
+				}
+				if _, statErr := os.Lstat(dbPath + ".lock"); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("lock file stat error = %v, want not exist", statErr)
+				}
+				content, readErr := os.ReadFile(dbPath)
+				if readErr != nil {
+					t.Fatalf("read fixture after command: %v", readErr)
+				}
+				if !bytes.Equal(content, fixture.content) {
+					t.Fatalf("fixture content changed")
+				}
+			})
+		}
+	}
+}
+
+func TestRunCommandExistingDatabaseActionsDoNotLockForeignSQLiteFiles(t *testing.T) {
+	for _, fixture := range []struct {
+		name      string
+		configure func(*testing.T, string)
+		wantErr   error
+	}{
+		{
+			name: "fresh-sqlite",
+			configure: func(t *testing.T, path string) {
+				db, err := storage.Open(context.Background(), path)
+				if err != nil {
+					t.Fatalf("open fresh SQLite fixture: %v", err)
+				}
+				if _, err := db.Exec(`PRAGMA user_version = 1`); err != nil {
+					t.Fatalf("materialize fresh SQLite fixture: %v", err)
+				}
+				if err := db.Close(); err != nil {
+					t.Fatalf("close fresh SQLite fixture: %v", err)
+				}
+			},
+			wantErr: storage.ErrSchemaNotReady,
+		},
+		{
+			name: "foreign-sqlite",
+			configure: func(t *testing.T, path string) {
+				db, err := storage.Open(context.Background(), path)
+				if err != nil {
+					t.Fatalf("open foreign SQLite fixture: %v", err)
+				}
+				if _, err := db.Exec(`CREATE TABLE foreign_data (id INTEGER PRIMARY KEY)`); err != nil {
+					t.Fatalf("create foreign SQLite fixture: %v", err)
+				}
+				if err := db.Close(); err != nil {
+					t.Fatalf("close foreign SQLite fixture: %v", err)
+				}
+			},
+			wantErr: storage.ErrUnrecognizedDatabase,
+		},
+	} {
+		for _, action := range []string{"verify", "backup"} {
+			t.Run(fixture.name+"/"+action, func(t *testing.T) {
+				dbPath := configureCommandDatabase(t)
+				fixture.configure(t, dbPath)
+
+				err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+				if !errors.Is(err, fixture.wantErr) {
+					t.Fatalf("db %s error = %v, want %v", action, err, fixture.wantErr)
+				}
+				if _, statErr := os.Lstat(dbPath + ".lock"); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("lock file stat error = %v, want not exist", statErr)
+				}
+			})
+		}
+	}
+}
+
+func TestRunCommandStatusRejectsDanglingSymlinkAndNonRegularPath(t *testing.T) {
+	t.Run("dangling-symlink", func(t *testing.T) {
+		root := t.TempDir()
+		dbPath := filepath.Join(root, "alias.db")
+		if err := os.Symlink(filepath.Join(root, "missing.db"), dbPath); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		t.Setenv("MINTRUD_ADMIN_ENV", "dev")
+		t.Setenv("MINTRUD_ADMIN_DB", dbPath)
+
+		for _, action := range []string{"status", "verify", "backup"} {
+			err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+			if err == nil {
+				t.Fatalf("db %s error = nil, want dangling symlink rejection", action)
+			}
+		}
+		if _, statErr := os.Lstat(dbPath); statErr != nil {
+			t.Fatalf("dangling symlink changed: %v", statErr)
+		}
+		if _, statErr := os.Lstat(dbPath + ".lock"); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("alias lock stat error = %v, want not exist", statErr)
+		}
+	})
+
+	t.Run("directory", func(t *testing.T) {
+		dbPath := configureCommandDatabase(t)
+		if err := os.Mkdir(dbPath, 0o700); err != nil {
+			t.Fatalf("create directory fixture: %v", err)
+		}
+		for _, action := range []string{"status", "verify", "backup"} {
+			err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+			if err == nil {
+				t.Fatalf("db %s error = nil, want non-regular path rejection", action)
+			}
+		}
+		if _, statErr := os.Lstat(dbPath + ".lock"); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("directory lock stat error = %v, want not exist", statErr)
+		}
+	})
+}
+
+func TestRunCommandBackupUsesCanonicalDatabasePathThroughSymlink(t *testing.T) {
+	root := t.TempDir()
+	realPath := filepath.Join(root, "real.db")
+	t.Setenv("MINTRUD_ADMIN_ENV", "dev")
+	t.Setenv("MINTRUD_ADMIN_DB", realPath)
+	if err := runCommand(context.Background(), []string{"db", "migrate"}, &bytes.Buffer{}, nil); err != nil {
+		t.Fatalf("migrate real database: %v", err)
+	}
+	if err := os.Remove(realPath + ".lock"); err != nil {
+		t.Fatalf("remove initial lock file: %v", err)
+	}
+
+	aliasPath := filepath.Join(root, "alias.db")
+	if err := os.Symlink(realPath, aliasPath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Setenv("MINTRUD_ADMIN_DB", aliasPath)
+	var out bytes.Buffer
+	if err := runCommand(context.Background(), []string{"db", "backup"}, &out, nil); err != nil {
+		t.Fatalf("backup through symlink: %v", err)
+	}
+	backupPath := strings.TrimPrefix(strings.TrimSpace(out.String()), "backup=")
+	if !strings.HasPrefix(filepath.Base(backupPath), "real.db.manual.") {
+		t.Fatalf("backup path = %q, want canonical real database basename", backupPath)
+	}
+	if _, err := os.Lstat(aliasPath + ".lock"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("alias lock stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(realPath + ".lock"); err != nil {
+		t.Fatalf("canonical lock stat: %v", err)
+	}
+}
+
 func TestRunCommandVerifyAndBackup(t *testing.T) {
 	configureCommandDatabase(t)
 	ctx := context.Background()
@@ -149,6 +335,9 @@ func TestRunCommandVerifyRejectsDatabaseWithPendingSchema(t *testing.T) {
 
 func TestRunCommandMutatingDatabaseCommandsRespectOwnerLock(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
+	if err := runCommand(context.Background(), []string{"db", "migrate"}, &bytes.Buffer{}, nil); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
 	owner, err := storage.AcquireOwnerLock(dbPath)
 	if err != nil {
 		t.Fatalf("acquire owner: %v", err)
@@ -277,5 +466,30 @@ func TestRunCommandRejectsUnknownCommandBeforeLoadingRuntimeConfig(t *testing.T)
 		if !errors.Is(err, ErrUsage) {
 			t.Fatalf("runCommand(%q) error = %v, want ErrUsage", args, err)
 		}
+	}
+}
+
+func TestRunCommandUsageDoesNotEchoRawArguments(t *testing.T) {
+	configureCommandDatabase(t)
+	sensitiveArgument := "synthetic-secret-command-argument"
+	err := runCommand(context.Background(), []string{"unknown", sensitiveArgument}, &bytes.Buffer{}, nil)
+	if !errors.Is(err, ErrUsage) {
+		t.Fatalf("run error = %v, want ErrUsage", err)
+	}
+	if strings.Contains(err.Error(), sensitiveArgument) {
+		t.Fatalf("usage error echoed raw argument: %v", err)
+	}
+	err = runDatabaseCommand(
+		context.Background(),
+		sensitiveArgument,
+		runtimeConfig{DBPath: filepath.Join(t.TempDir(), "unused.db")},
+		&bytes.Buffer{},
+		nil,
+	)
+	if !errors.Is(err, ErrUsage) {
+		t.Fatalf("direct database command error = %v, want ErrUsage", err)
+	}
+	if strings.Contains(err.Error(), sensitiveArgument) {
+		t.Fatalf("database usage error echoed raw action: %v", err)
 	}
 }

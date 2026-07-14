@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 
 	"go.uber.org/zap"
@@ -20,7 +19,7 @@ func runCommand(
 	serveCommand := len(args) == 0 || (len(args) == 1 && args[0] == "serve")
 	databaseCommand := len(args) == 2 && args[0] == "db" && isDatabaseAction(args[1])
 	if !serveCommand && !databaseCommand {
-		return fmt.Errorf("%w: arguments=%q", ErrUsage, args)
+		return ErrUsage
 	}
 
 	config, err := loadRuntimeConfig()

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
@@ -15,6 +16,54 @@ import (
 
 type Server struct {
 	httpServer *http.Server
+	handlers   *handlerLifecycle
+}
+
+type handlerLifecycle struct {
+	next    http.Handler
+	mu      sync.Mutex
+	closing bool
+	active  int
+	drained chan struct{}
+}
+
+func newHandlerLifecycle(next http.Handler) *handlerLifecycle {
+	return &handlerLifecycle{next: next, drained: make(chan struct{})}
+}
+
+func (lifecycle *handlerLifecycle) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	lifecycle.mu.Lock()
+	if lifecycle.closing {
+		lifecycle.mu.Unlock()
+		http.Error(writer, "server is shutting down", http.StatusServiceUnavailable)
+		return
+	}
+	lifecycle.active++
+	lifecycle.mu.Unlock()
+
+	defer lifecycle.done()
+	lifecycle.next.ServeHTTP(writer, request)
+}
+
+func (lifecycle *handlerLifecycle) done() {
+	lifecycle.mu.Lock()
+	defer lifecycle.mu.Unlock()
+	lifecycle.active--
+	if lifecycle.closing && lifecycle.active == 0 {
+		close(lifecycle.drained)
+	}
+}
+
+func (lifecycle *handlerLifecycle) stop() <-chan struct{} {
+	lifecycle.mu.Lock()
+	defer lifecycle.mu.Unlock()
+	if !lifecycle.closing {
+		lifecycle.closing = true
+		if lifecycle.active == 0 {
+			close(lifecycle.drained)
+		}
+	}
+	return lifecycle.drained
 }
 
 // NewServer builds the HTTP server.
@@ -52,13 +101,15 @@ func NewServer(addr string, database *sql.DB, log *zap.Logger, frontend Frontend
 		Log:       log,
 		Frontend:  frontend,
 	})
+	handlers := newHandlerLifecycle(handler)
 
 	return &Server{
 		httpServer: &http.Server{
 			Addr:     addr,
-			Handler:  handler,
+			Handler:  handlers,
 			ErrorLog: zap.NewStdLog(log.Named("http")),
 		},
+		handlers: handlers,
 	}, nil
 }
 
@@ -70,8 +121,29 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	drained := s.handlers.stop()
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		return fmt.Errorf("shutdown server: %w", err)
+	}
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		return fmt.Errorf("wait for application handlers: %w", ctx.Err())
+	}
+	return nil
+}
+
+// Close force-closes the HTTP server and waits for every admitted application
+// handler to return. The application does not use hijacked connections; adding
+// them would require separate lifecycle tracking before database ownership can
+// still be released safely. The handler wait deliberately has no timeout: a
+// caller must not release database ownership while application code is active.
+func (s *Server) Close() error {
+	drained := s.handlers.stop()
+	err := s.httpServer.Close()
+	<-drained
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("force close server: %w", err)
 	}
 	return nil
 }

@@ -19,6 +19,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const gracefulShutdownTimeout = 10 * time.Second
+
+type shutdownCapableServer interface {
+	Shutdown(context.Context) error
+	Close() error
+}
+
 func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) error {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -32,8 +39,8 @@ func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) 
 		zap.String("db_config", "MINTRUD_ADMIN_DB"),
 	)
 
-	return withOwnedDatabase(ctx, config.DBPath, func(database *sql.DB) error {
-		initializer, err := storage.NewEmbeddedInitializer(database, config.DBPath)
+	return withOwnedDatabase(ctx, config.DBPath, databaseMayCreate, func(database *sql.DB, ownedPath string) error {
+		initializer, err := storage.NewEmbeddedInitializer(database, ownedPath)
 		if err != nil {
 			return err
 		}
@@ -42,32 +49,28 @@ func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) 
 		preparationDuration := time.Since(preparationStarted)
 		logPendingMigrations(logger, prepared.Before.Pending)
 		logAppliedMigrations(logger, prepared.Migration.Applied)
-		logVerifiedBackup(logger, config.DBPath, prepared.BackupPath)
+		logVerifiedBackup(logger, ownedPath, prepared.BackupPath)
 		if err != nil {
 			logMigrationFailure(logger, err)
 			logDatabasePreparationFailure(
 				logger,
-				config.DBPath,
+				ownedPath,
 				prepared,
 				preparationDuration,
 				err,
 			)
 			return err
 		}
-		postMigrationChecks := "not_required"
-		if len(prepared.Before.Pending) > 0 {
-			postMigrationChecks = "passed"
-		}
 		logger.Info(
 			"database ready",
-			zap.String("database_path", config.DBPath),
+			zap.String("database_path", ownedPath),
 			zap.Int64("schema_from", prepared.Before.Current),
 			zap.Int64("schema_target", prepared.Before.Target),
 			zap.Int64("schema_to", prepared.After.Current),
 			zap.Int("pending_migrations", len(prepared.Before.Pending)),
 			zap.Int("migrations_applied", len(prepared.Migration.Applied)),
 			zap.String("backup_path", prepared.BackupPath),
-			zap.String("post_migration_checks", postMigrationChecks),
+			zap.String("post_migration_checks", "passed"),
 			zap.Duration("preparation_duration", preparationDuration),
 		)
 
@@ -93,25 +96,45 @@ func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) 
 		}()
 
 		select {
-		case err := <-serverErr:
-			if errors.Is(err, http.ErrServerClosed) {
-				return nil
+		case serveErr := <-serverErr:
+			closeErr := server.Close()
+			if errors.Is(serveErr, http.ErrServerClosed) {
+				serveErr = nil
 			}
-			return err
+			return errors.Join(serveErr, closeErr)
 		case <-ctx.Done():
 			logger.Info("shutdown requested")
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if err := server.Shutdown(shutdownCtx); err != nil {
-				return fmt.Errorf("shutdown server: %w", err)
-			}
-			if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := shutdownServer(server, serverErr, gracefulShutdownTimeout); err != nil {
 				return err
 			}
 			logger.Info("server shutdown complete")
 			return nil
 		}
 	})
+}
+
+func shutdownServer(server shutdownCapableServer, serverErr <-chan error, timeout time.Duration) error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if shutdownErr == nil {
+		serveErr := <-serverErr
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			return serveErr
+		}
+		return nil
+	}
+
+	closeErr := server.Close()
+	serveErr := <-serverErr
+	if errors.Is(serveErr, http.ErrServerClosed) {
+		serveErr = nil
+	}
+	return errors.Join(
+		fmt.Errorf("shutdown server: %w", shutdownErr),
+		closeErr,
+		serveErr,
+	)
 }
 
 func frontendConfigFromEnv() app.FrontendConfig {

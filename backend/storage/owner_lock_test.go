@@ -75,6 +75,13 @@ func TestAcquireOwnerLockContendsAcrossFinalSymlink(t *testing.T) {
 		t.Fatalf("AcquireOwnerLock(real path) error = %v", err)
 	}
 	defer owner.Close()
+	canonicalRealPath, err := filepath.EvalSymlinks(realPath)
+	if err != nil {
+		t.Fatalf("canonicalize real database path: %v", err)
+	}
+	if got := owner.DatabasePath(); got != canonicalRealPath {
+		t.Fatalf("owner database path = %q, want %q", got, canonicalRealPath)
+	}
 
 	aliasOwner, err := AcquireOwnerLock(aliasPath)
 	if aliasOwner != nil {
@@ -83,6 +90,30 @@ func TestAcquireOwnerLockContendsAcrossFinalSymlink(t *testing.T) {
 	}
 	if !errors.Is(err, ErrDatabaseInUse) {
 		t.Fatalf("AcquireOwnerLock(symlink) error = %v, want ErrDatabaseInUse", err)
+	}
+}
+
+func TestAcquireOwnerLockExposesCanonicalDatabasePathForSymlink(t *testing.T) {
+	root := t.TempDir()
+	realPath := filepath.Join(root, "real.db")
+	if err := os.WriteFile(realPath, []byte("database-placeholder"), 0o600); err != nil {
+		t.Fatalf("create database file: %v", err)
+	}
+	aliasPath := filepath.Join(root, "alias.db")
+	createSymlinkOrSkip(t, realPath, aliasPath)
+
+	owner, err := AcquireOwnerLock(aliasPath)
+	if err != nil {
+		t.Fatalf("AcquireOwnerLock(symlink) error = %v", err)
+	}
+	defer owner.Close()
+
+	canonicalRealPath, err := filepath.EvalSymlinks(realPath)
+	if err != nil {
+		t.Fatalf("canonicalize real database path: %v", err)
+	}
+	if got := owner.DatabasePath(); got != canonicalRealPath {
+		t.Fatalf("owner database path = %q, want canonical path %q", got, canonicalRealPath)
 	}
 }
 

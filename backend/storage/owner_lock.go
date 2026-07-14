@@ -12,7 +12,8 @@ import (
 var ErrDatabaseInUse = errors.New("database is already owned by another process")
 
 type OwnerLock struct {
-	file *flock.Flock
+	file         *flock.Flock
+	databasePath string
 }
 
 // AcquireOwnerLock takes the cooperative process-ownership lock for dbPath.
@@ -37,7 +38,17 @@ func AcquireOwnerLock(dbPath string) (*OwnerLock, error) {
 		return nil, fmt.Errorf("%w: %s", ErrDatabaseInUse, lockPath)
 	}
 
-	return &OwnerLock{file: file}, nil
+	return &OwnerLock{file: file, databasePath: canonicalPath}, nil
+}
+
+// DatabasePath returns the immutable canonical database path protected by the
+// lock. Callers must open this path instead of resolving the configured path a
+// second time after ownership has been acquired.
+func (owner *OwnerLock) DatabasePath() string {
+	if owner == nil {
+		return ""
+	}
+	return owner.databasePath
 }
 
 func canonicalDatabasePath(dbPath string) (string, error) {

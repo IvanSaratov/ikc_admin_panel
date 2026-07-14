@@ -14,6 +14,23 @@ import (
 	"go.uber.org/zap"
 )
 
+type databaseOpenPolicy uint8
+
+const (
+	databaseMayCreate databaseOpenPolicy = iota
+	databaseMustExist
+)
+
+type databaseFileState uint8
+
+const (
+	databaseFileMissing databaseFileState = iota
+	databaseFileEmpty
+	databaseFileSQLite
+)
+
+const sqliteFileHeader = "SQLite format 3\x00"
+
 func writeEmbeddedCatalogStatus(out io.Writer) error {
 	catalog, err := storage.EmbeddedMigrationCatalog()
 	if err != nil {
@@ -23,12 +40,12 @@ func writeEmbeddedCatalogStatus(out io.Writer) error {
 }
 
 func runStatusCommand(ctx context.Context, config runtimeConfig, stdout io.Writer) error {
-	info, err := os.Stat(config.DBPath)
-	if errors.Is(err, os.ErrNotExist) || (err == nil && info.Size() == 0) {
-		return writeEmbeddedCatalogStatus(stdout)
-	}
+	state, err := inspectDatabaseFile(config.DBPath)
 	if err != nil {
-		return fmt.Errorf("stat database for status: %w", err)
+		return err
+	}
+	if state == databaseFileMissing || state == databaseFileEmpty {
+		return writeEmbeddedCatalogStatus(stdout)
 	}
 
 	db, err := storage.OpenReadOnly(ctx, config.DBPath)
@@ -70,23 +87,110 @@ func runStatusCommand(ctx context.Context, config runtimeConfig, stdout io.Write
 func withOwnedDatabase(
 	ctx context.Context,
 	path string,
-	fn func(*sql.DB) error,
+	policy databaseOpenPolicy,
+	fn func(*sql.DB, string) error,
 ) (retErr error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create data directory: %w", err)
+	if policy == databaseMayCreate {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("create data directory: %w", err)
+		}
+	} else if err := requireExistingSQLiteDatabase(ctx, path); err != nil {
+		return err
 	}
 	owner, err := storage.AcquireOwnerLock(path)
 	if err != nil {
 		return err
 	}
 	defer func() { retErr = errors.Join(retErr, owner.Close()) }()
+	ownedPath := owner.DatabasePath()
+	if policy == databaseMustExist {
+		if err := requireExistingSQLiteDatabase(ctx, ownedPath); err != nil {
+			return err
+		}
+	}
 
-	db, err := storage.Open(ctx, path)
+	db, err := storage.Open(ctx, ownedPath)
 	if err != nil {
 		return err
 	}
 	defer func() { retErr = errors.Join(retErr, db.Close()) }()
-	return fn(db)
+	return fn(db, ownedPath)
+}
+
+func requireExistingSQLiteDatabase(ctx context.Context, path string) error {
+	state, err := inspectDatabaseFile(path)
+	if err != nil {
+		return err
+	}
+	if state != databaseFileSQLite {
+		return fmt.Errorf("%w: existing non-empty SQLite database is required", storage.ErrSchemaNotReady)
+	}
+	return inspectApplicationDatabaseReadOnly(ctx, path)
+}
+
+func inspectApplicationDatabaseReadOnly(ctx context.Context, path string) (retErr error) {
+	db, err := storage.OpenReadOnly(ctx, path)
+	if err != nil {
+		return fmt.Errorf("validate existing SQLite database: %w", err)
+	}
+	defer func() { retErr = errors.Join(retErr, db.Close()) }()
+
+	identity, err := storage.InspectDatabaseIdentity(ctx, db)
+	if err != nil {
+		return err
+	}
+	if identity.Fresh {
+		return fmt.Errorf("%w: existing SQLite database has no application schema", storage.ErrSchemaNotReady)
+	}
+	return nil
+}
+
+func inspectDatabaseFile(path string) (databaseFileState, error) {
+	if path == "" {
+		return databaseFileMissing, errors.New("database path is empty")
+	}
+	if _, err := os.Lstat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return databaseFileMissing, nil
+		}
+		return databaseFileMissing, fmt.Errorf("inspect database path: %w", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return databaseFileMissing, errors.New("database path is a dangling symlink")
+		}
+		return databaseFileMissing, fmt.Errorf("stat database path: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return databaseFileMissing, errors.New("database path is not a regular file")
+	}
+	if info.Size() == 0 {
+		return databaseFileEmpty, nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return databaseFileMissing, fmt.Errorf("open database header: %w", err)
+	}
+	header := make([]byte, len(sqliteFileHeader))
+	readCount, readErr := io.ReadFull(file, header)
+	closeErr := file.Close()
+	if readErr != nil || string(header) != sqliteFileHeader {
+		validationErr := fmt.Errorf(
+			"%w: invalid SQLite file header (%d bytes read)",
+			storage.ErrUnrecognizedDatabase,
+			readCount,
+		)
+		if closeErr != nil {
+			validationErr = errors.Join(validationErr, fmt.Errorf("close database header: %w", closeErr))
+		}
+		return databaseFileMissing, validationErr
+	}
+	if closeErr != nil {
+		return databaseFileMissing, fmt.Errorf("close database header: %w", closeErr)
+	}
+	return databaseFileSQLite, nil
 }
 
 func writeMigrationStatus(out io.Writer, status storage.MigrationStatus) error {
@@ -200,12 +304,16 @@ func runDatabaseCommand(
 		return runStatusCommand(ctx, config, stdout)
 	}
 	if action != "migrate" && action != "verify" && action != "backup" {
-		return fmt.Errorf("%w: unknown db command %q", ErrUsage, action)
+		return ErrUsage
 	}
 
-	return withOwnedDatabase(ctx, config.DBPath, func(db *sql.DB) error {
+	policy := databaseMustExist
+	if action == "migrate" {
+		policy = databaseMayCreate
+	}
+	return withOwnedDatabase(ctx, config.DBPath, policy, func(db *sql.DB, ownedPath string) error {
 		if action == "migrate" {
-			initializer, err := storage.NewEmbeddedInitializer(db, config.DBPath)
+			initializer, err := storage.NewEmbeddedInitializer(db, ownedPath)
 			if err != nil {
 				return err
 			}
@@ -214,10 +322,10 @@ func runDatabaseCommand(
 			duration := time.Since(started)
 			logPendingMigrations(logger, result.Before.Pending)
 			logAppliedMigrations(logger, result.Migration.Applied)
-			logVerifiedBackup(logger, config.DBPath, result.BackupPath)
+			logVerifiedBackup(logger, ownedPath, result.BackupPath)
 			if err != nil {
 				logMigrationFailure(logger, err)
-				logDatabasePreparationFailure(logger, config.DBPath, result, duration, err)
+				logDatabasePreparationFailure(logger, ownedPath, result, duration, err)
 				return err
 			}
 			return writeMigrationStatus(stdout, result.After)
@@ -267,14 +375,14 @@ func runDatabaseCommand(
 			if err := storage.QuickCheck(ctx, db); err != nil {
 				return err
 			}
-			path, err := storage.NewBackupManager(config.DBPath).CreateManual(ctx, db, status.Current)
+			path, err := storage.NewBackupManager(ownedPath).CreateManual(ctx, db, status.Current)
 			if err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(stdout, "backup=%s\n", path)
 			return err
 		default:
-			return fmt.Errorf("%w: unknown db command %q", ErrUsage, action)
+			return ErrUsage
 		}
 	})
 }

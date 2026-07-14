@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -13,6 +15,54 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+type shutdownTestServer struct {
+	shutdownErr error
+	closeErr    error
+	closed      bool
+	onClose     func()
+}
+
+func (server *shutdownTestServer) Shutdown(context.Context) error {
+	return server.shutdownErr
+}
+
+func (server *shutdownTestServer) Close() error {
+	server.closed = true
+	if server.onClose != nil {
+		server.onClose()
+	}
+	return server.closeErr
+}
+
+func TestShutdownServerForcesCloseAndWaitsAfterGracefulFailure(t *testing.T) {
+	shutdownErr := errors.New("synthetic shutdown timeout")
+	closeErr := errors.New("synthetic forced-close warning")
+	serveErr := make(chan error, 1)
+	server := &shutdownTestServer{
+		shutdownErr: shutdownErr,
+		closeErr:    closeErr,
+		onClose: func() {
+			serveErr <- http.ErrServerClosed
+		},
+	}
+
+	err := shutdownServer(server, serveErr, time.Millisecond)
+	if !errors.Is(err, shutdownErr) {
+		t.Fatalf("shutdownServer error = %v, want shutdown error", err)
+	}
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("shutdownServer error = %v, want forced-close error", err)
+	}
+	if !server.closed {
+		t.Fatal("shutdownServer did not force close after graceful failure")
+	}
+	select {
+	case leftover := <-serveErr:
+		t.Fatalf("shutdownServer did not wait for serve result: %v", leftover)
+	default:
+	}
+}
 
 func TestRunServeRejectsTooNewSchemaBeforeStartingHTTP(t *testing.T) {
 	ctx := context.Background()
@@ -139,5 +189,57 @@ func TestRunServeReleasesOwnerLockWhenBootstrapFails(t *testing.T) {
 	}
 	if err := owner.Close(); err != nil {
 		t.Fatalf("close owner lock: %v", err)
+	}
+}
+
+func TestRunServeLogsChecksPassedForCurrentSchema(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "current.db")
+	t.Setenv("MINTRUD_ADMIN_ENV", "dev")
+	t.Setenv("MINTRUD_ADMIN_DB", dbPath)
+	t.Setenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD", "synthetic-test-password")
+	t.Setenv("MINTRUD_ADMIN_FRONTEND", "disabled")
+	if err := runCommand(context.Background(), []string{"db", "migrate"}, io.Discard, nil); err != nil {
+		t.Fatalf("migrate current database: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	core, observed := observer.New(zap.InfoLevel)
+	result := make(chan error, 1)
+	go func() {
+		result <- runServe(
+			ctx,
+			runtimeConfig{Addr: "127.0.0.1:0", DBPath: dbPath},
+			zap.New(core),
+		)
+	}()
+
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for observed.FilterMessage("Mintrud Admin listening").Len() == 0 {
+		select {
+		case err := <-result:
+			t.Fatalf("runServe returned before listening: %v", err)
+		case <-deadline.C:
+			t.Fatal("timed out waiting for server startup")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	ready := observed.FilterMessage("database ready").All()
+	if len(ready) != 1 {
+		t.Fatalf("database ready log count = %d, want 1", len(ready))
+	}
+	if got := ready[0].ContextMap()["post_migration_checks"]; got != "passed" {
+		t.Fatalf("post_migration_checks = %v, want passed", got)
+	}
+
+	cancel()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("runServe shutdown: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for server shutdown")
 	}
 }
