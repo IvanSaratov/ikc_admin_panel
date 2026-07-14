@@ -109,7 +109,12 @@ func withOwnedDatabase(
 		}
 	}
 
-	db, err := storage.Open(ctx, ownedPath)
+	var db *sql.DB
+	if policy == databaseMustExist {
+		db, err = storage.OpenExisting(ctx, ownedPath)
+	} else {
+		db, err = storage.Open(ctx, ownedPath)
+	}
 	if err != nil {
 		return err
 	}

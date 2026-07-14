@@ -34,6 +34,16 @@ func OpenReadOnly(ctx context.Context, path string) (*sql.DB, error) {
 }
 
 func readOnlyDatabaseDSN(path string) string {
+	databaseURL := sqliteFileURL(path)
+	query := url.Values{}
+	query.Set("mode", "ro")
+	query.Add("_pragma", "busy_timeout(5000)")
+	query.Add("_pragma", "query_only(1)")
+	databaseURL.RawQuery = query.Encode()
+	return databaseURL.String()
+}
+
+func sqliteFileURL(path string) url.URL {
 	databaseURL := url.URL{Scheme: "file"}
 	switch {
 	case strings.HasPrefix(path, "//"):
@@ -43,10 +53,5 @@ func readOnlyDatabaseDSN(path string) string {
 	default:
 		databaseURL.Path = path
 	}
-	query := url.Values{}
-	query.Set("mode", "ro")
-	query.Add("_pragma", "busy_timeout(5000)")
-	query.Add("_pragma", "query_only(1)")
-	databaseURL.RawQuery = query.Encode()
-	return databaseURL.String()
+	return databaseURL
 }
