@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 )
 
 func checkIntegrityPragma(ctx context.Context, db *sql.DB, pragma string) error {
@@ -53,10 +54,14 @@ func ForeignKeyCheck(ctx context.Context, db *sql.DB) error {
 		if err := rows.Scan(&table, &rowID, &parent, &foreignKeyID); err != nil {
 			return fmt.Errorf("scan SQLite foreign key violation: %w", err)
 		}
+		rowIDText := "NULL"
+		if rowID.Valid {
+			rowIDText = strconv.FormatInt(rowID.Int64, 10)
+		}
 		return fmt.Errorf(
-			"SQLite foreign key violation: table %q, row ID %v, parent %q, foreign key ID %d",
+			"SQLite foreign key violation: table %q, row ID %s, parent %q, foreign key ID %d",
 			table,
-			rowID,
+			rowIDText,
 			parent,
 			foreignKeyID,
 		)

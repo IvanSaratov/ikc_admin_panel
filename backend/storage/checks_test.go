@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,7 +80,43 @@ func TestForeignKeyCheckRejectsViolation(t *testing.T) {
 		}
 	}
 
-	if err := ForeignKeyCheck(ctx, db); err == nil {
+	err = ForeignKeyCheck(ctx, db)
+	if err == nil {
 		t.Fatal("ForeignKeyCheck() error = nil, want violation")
+	}
+	if !strings.Contains(err.Error(), "row ID 1") || strings.Contains(err.Error(), "{1 true}") {
+		t.Fatalf("ForeignKeyCheck() error = %v, want integer row ID diagnostic", err)
+	}
+}
+
+func TestForeignKeyCheckReportsWithoutRowIDViolation(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "foreign-key-without-rowid.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	statements := []string{
+		`CREATE TABLE parents (id INTEGER PRIMARY KEY)`,
+		`CREATE TABLE children (id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL REFERENCES parents(id)) WITHOUT ROWID`,
+		`PRAGMA foreign_keys = OFF`,
+		`INSERT INTO children (id, parent_id) VALUES (1, 999)`,
+		`PRAGMA foreign_keys = ON`,
+	}
+	for _, statement := range statements {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("execute %q: %v", statement, err)
+		}
+	}
+
+	err = ForeignKeyCheck(ctx, db)
+	if err == nil {
+		t.Fatal("ForeignKeyCheck() error = nil, want violation")
+	}
+	if !strings.Contains(err.Error(), "row ID NULL") || strings.Contains(err.Error(), "{0 false}") {
+		t.Fatalf("ForeignKeyCheck() error = %v, want NULL row ID diagnostic", err)
 	}
 }

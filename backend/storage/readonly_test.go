@@ -2,10 +2,68 @@ package storage
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestReadOnlyDatabaseDSNBuildsPortableFileURI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		path        string
+		wantHost    string
+		wantPath    string
+		wantEscaped string
+	}{
+		{
+			name:        "Windows drive",
+			path:        "C:/Program Data/IKC/app#1%?.db",
+			wantPath:    "/C:/Program Data/IKC/app#1%?.db",
+			wantEscaped: "/C:/Program%20Data/IKC/app%231%25%3F.db",
+		},
+		{
+			name:        "UNC share",
+			path:        "//server/share/IKC app.db",
+			wantHost:    "server",
+			wantPath:    "/share/IKC app.db",
+			wantEscaped: "/share/IKC%20app.db",
+		},
+		{
+			name:        "POSIX absolute",
+			path:        "/var/lib/IKC app#1%?.db",
+			wantPath:    "/var/lib/IKC app#1%?.db",
+			wantEscaped: "/var/lib/IKC%20app%231%25%3F.db",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			dsn := readOnlyDatabaseDSN(test.path)
+			parsed, err := url.Parse(dsn)
+			if err != nil {
+				t.Fatalf("url.Parse(%q) error = %v", dsn, err)
+			}
+			if parsed.Scheme != "file" || parsed.Host != test.wantHost || parsed.Path != test.wantPath {
+				t.Fatalf("parsed URI = scheme %q, host %q, path %q; want file, %q, %q", parsed.Scheme, parsed.Host, parsed.Path, test.wantHost, test.wantPath)
+			}
+			if got := parsed.EscapedPath(); got != test.wantEscaped {
+				t.Fatalf("escaped path = %q, want %q", got, test.wantEscaped)
+			}
+			query := parsed.Query()
+			if got := query.Get("mode"); got != "ro" {
+				t.Fatalf("mode = %q, want ro", got)
+			}
+			wantPragmas := []string{"busy_timeout(5000)", "query_only(1)"}
+			if got := query["_pragma"]; !reflect.DeepEqual(got, wantPragmas) {
+				t.Fatalf("pragmas = %q, want %q", got, wantPragmas)
+			}
+		})
+	}
+}
 
 func TestOpenReadOnlyPermitsReadsAndRejectsWrites(t *testing.T) {
 	t.Parallel()

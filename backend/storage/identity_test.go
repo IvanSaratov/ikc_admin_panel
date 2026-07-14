@@ -23,7 +23,7 @@ func TestInspectDatabaseIdentityDistinguishesDatabaseKinds(t *testing.T) {
 		if err != nil {
 			t.Fatalf("InspectDatabaseIdentity() error = %v", err)
 		}
-		if !identity.Fresh || identity.ApplicationID != 0 || identity.UserObjects != 0 || identity.HasMigrationHistory {
+		if !identity.Fresh || identity.ApplicationID != 0 || identity.UserObjects != 0 || identity.ApplicationTables != 0 || identity.HasMigrationHistory {
 			t.Fatalf("identity = %+v, want fresh empty database", identity)
 		}
 	})
@@ -47,7 +47,7 @@ func TestInspectDatabaseIdentityDistinguishesDatabaseKinds(t *testing.T) {
 		if err != nil {
 			t.Fatalf("InspectDatabaseIdentity() error = %v", err)
 		}
-		if identity.Fresh || identity.ApplicationID != SQLiteApplicationID || identity.UserObjects == 0 || !identity.HasMigrationHistory {
+		if identity.Fresh || identity.ApplicationID != SQLiteApplicationID || identity.UserObjects == 0 || identity.ApplicationTables == 0 || !identity.HasMigrationHistory {
 			t.Fatalf("identity = %+v, want recognized migrated database", identity)
 		}
 	})
@@ -69,12 +69,42 @@ func TestInspectDatabaseIdentityDistinguishesDatabaseKinds(t *testing.T) {
 	})
 }
 
+func TestInspectDatabaseIdentityRejectsHistoryOnlyDatabase(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "history-only.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.ExecContext(ctx, `PRAGMA application_id = 0x494B4341`); err != nil {
+		t.Fatalf("set application ID: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE goose_db_version (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatalf("create migration history: %v", err)
+	}
+
+	identity, err := InspectDatabaseIdentity(ctx, db)
+	if !errors.Is(err, ErrSchemaNotReady) {
+		t.Fatalf("InspectDatabaseIdentity() error = %v, want ErrSchemaNotReady", err)
+	}
+	if identity.UserObjects != 1 || identity.ApplicationTables != 0 || !identity.HasMigrationHistory {
+		t.Fatalf("identity = %+v, want history-only database", identity)
+	}
+	status := MigrationStatus{Current: 2, Target: 2}
+	if err := RequireCurrentSchema(identity, status); !errors.Is(err, ErrSchemaNotReady) {
+		t.Fatalf("RequireCurrentSchema() error = %v, want ErrSchemaNotReady", err)
+	}
+}
+
 func TestRequireCurrentSchemaRejectsUnreadyVersions(t *testing.T) {
 	t.Parallel()
 
 	recognized := DatabaseIdentity{
 		ApplicationID:       SQLiteApplicationID,
 		UserObjects:         2,
+		ApplicationTables:   1,
 		HasMigrationHistory: true,
 	}
 	tests := []struct {
@@ -105,8 +135,8 @@ func TestRequireCurrentSchemaRejectsInvalidIdentity(t *testing.T) {
 		identity DatabaseIdentity
 	}{
 		{name: "fresh", identity: DatabaseIdentity{Fresh: true}},
-		{name: "wrong application id", identity: DatabaseIdentity{ApplicationID: 7, UserObjects: 2, HasMigrationHistory: true}},
-		{name: "missing migration history", identity: DatabaseIdentity{ApplicationID: SQLiteApplicationID, UserObjects: 1}},
+		{name: "wrong application id", identity: DatabaseIdentity{ApplicationID: 7, UserObjects: 2, ApplicationTables: 1, HasMigrationHistory: true}},
+		{name: "missing migration history", identity: DatabaseIdentity{ApplicationID: SQLiteApplicationID, UserObjects: 1, ApplicationTables: 1}},
 	}
 	for _, test := range tests {
 		test := test

@@ -18,22 +18,38 @@ type DatabaseIdentity struct {
 	Fresh               bool
 	ApplicationID       int64
 	UserObjects         int64
+	ApplicationTables   int64
 	HasMigrationHistory bool
 }
 
 func InspectDatabaseIdentity(ctx context.Context, db *sql.DB) (DatabaseIdentity, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return DatabaseIdentity{}, fmt.Errorf("begin SQLite identity snapshot: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var identity DatabaseIdentity
-	if err := db.QueryRowContext(ctx, "PRAGMA application_id").Scan(&identity.ApplicationID); err != nil {
+	if err := tx.QueryRowContext(ctx, "PRAGMA application_id").Scan(&identity.ApplicationID); err != nil {
 		return DatabaseIdentity{}, fmt.Errorf("read SQLite application ID: %w", err)
 	}
-	if err := db.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM sqlite_schema
 		WHERE substr(name, 1, 7) <> 'sqlite_'
 	`).Scan(&identity.UserObjects); err != nil {
 		return DatabaseIdentity{}, fmt.Errorf("count SQLite user objects: %w", err)
 	}
-	if err := db.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM sqlite_schema
+		WHERE type = 'table'
+			AND substr(name, 1, 7) <> 'sqlite_'
+			AND name <> 'goose_db_version'
+	`).Scan(&identity.ApplicationTables); err != nil {
+		return DatabaseIdentity{}, fmt.Errorf("count SQLite application tables: %w", err)
+	}
+	if err := tx.QueryRowContext(ctx, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM sqlite_schema
@@ -41,6 +57,9 @@ func InspectDatabaseIdentity(ctx context.Context, db *sql.DB) (DatabaseIdentity,
 		)
 	`).Scan(&identity.HasMigrationHistory); err != nil {
 		return DatabaseIdentity{}, fmt.Errorf("inspect SQLite migration history: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return DatabaseIdentity{}, fmt.Errorf("commit SQLite identity snapshot: %w", err)
 	}
 
 	identity.Fresh = identity.ApplicationID == 0 && identity.UserObjects == 0
@@ -55,12 +74,13 @@ func InspectDatabaseIdentity(ctx context.Context, db *sql.DB) (DatabaseIdentity,
 			identity.UserObjects,
 		)
 	}
-	if identity.UserObjects == 0 || !identity.HasMigrationHistory {
+	if identity.ApplicationTables == 0 || !identity.HasMigrationHistory {
 		return identity, fmt.Errorf(
-			"%w: application ID %d, user objects %d, migration history %t",
+			"%w: application ID %d, user objects %d, application tables %d, migration history %t",
 			ErrSchemaNotReady,
 			identity.ApplicationID,
 			identity.UserObjects,
+			identity.ApplicationTables,
 			identity.HasMigrationHistory,
 		)
 	}
@@ -68,13 +88,14 @@ func InspectDatabaseIdentity(ctx context.Context, db *sql.DB) (DatabaseIdentity,
 }
 
 func RequireCurrentSchema(identity DatabaseIdentity, status MigrationStatus) error {
-	if identity.Fresh || identity.ApplicationID != SQLiteApplicationID || identity.UserObjects == 0 || !identity.HasMigrationHistory {
+	if identity.Fresh || identity.ApplicationID != SQLiteApplicationID || identity.ApplicationTables == 0 || !identity.HasMigrationHistory {
 		return fmt.Errorf(
-			"%w: fresh %t, application ID %d, user objects %d, migration history %t",
+			"%w: fresh %t, application ID %d, user objects %d, application tables %d, migration history %t",
 			ErrSchemaNotReady,
 			identity.Fresh,
 			identity.ApplicationID,
 			identity.UserObjects,
+			identity.ApplicationTables,
 			identity.HasMigrationHistory,
 		)
 	}
