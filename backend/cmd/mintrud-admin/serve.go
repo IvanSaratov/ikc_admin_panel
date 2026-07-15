@@ -85,7 +85,20 @@ func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) 
 		}
 		logger.Info("bootstrap admin ensured")
 
-		server, err := app.NewServer(config.Addr, database, logger, frontendConfigFromEnv())
+		sessionConfig, err := admin.LoadSessionConfig()
+		if err != nil {
+			return err
+		}
+		csrfMiddleware, err := admin.LoadCSRFWithLogger(logger)
+		if err != nil {
+			return err
+		}
+		server, err := app.NewServer(app.ServerConfig{
+			Addr:     config.Addr,
+			Sessions: admin.NewSessionManager(sessionConfig),
+			CSRF:     csrfMiddleware,
+			Frontend: frontendConfigFromEnv(),
+		}, database, logger)
 		if err != nil {
 			return err
 		}

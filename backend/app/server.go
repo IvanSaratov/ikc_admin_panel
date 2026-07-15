@@ -19,6 +19,13 @@ type Server struct {
 	handlers   *handlerLifecycle
 }
 
+type ServerConfig struct {
+	Addr     string
+	Sessions *scs.SessionManager
+	CSRF     func(http.Handler) http.Handler
+	Frontend FrontendConfig
+}
+
 type handlerLifecycle struct {
 	next    http.Handler
 	mu      sync.Mutex
@@ -66,26 +73,10 @@ func (lifecycle *handlerLifecycle) stop() <-chan struct{} {
 	return lifecycle.drained
 }
 
-// NewServer builds the HTTP server.
-//
-// All auth wiring (session manager, CSRF middleware) is created here so
-// the caller (main.go) doesn't have to repeat env-handling logic. If
-// any of the underlying constructors fails (e.g. bad CSRF key), the
-// error is returned at startup rather than at first-request.
-func NewServer(addr string, database *sql.DB, log *zap.Logger, frontend FrontendConfig) (*Server, error) {
+// NewServer builds the HTTP server from already-resolved dependencies.
+func NewServer(config ServerConfig, database *sql.DB, log *zap.Logger) (*Server, error) {
 	if log == nil {
 		log = zap.NewNop()
-	}
-
-	sessionCfg, err := admin.LoadSessionConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load session config: %w", err)
-	}
-	sessions := admin.NewSessionManager(sessionCfg)
-
-	csrfMW, err := admin.LoadCSRFWithLogger(log)
-	if err != nil {
-		return nil, fmt.Errorf("load csrf: %w", err)
 	}
 
 	// Login rate limit: 10 attempts per IP per 5 minutes (sliding window).
@@ -95,17 +86,17 @@ func NewServer(addr string, database *sql.DB, log *zap.Logger, frontend Frontend
 
 	handler := NewRouter(Deps{
 		Database:  database,
-		Sessions:  sessions,
-		CSRF:      csrfMW,
+		Sessions:  config.Sessions,
+		CSRF:      config.CSRF,
 		LoginRate: loginRate,
 		Log:       log,
-		Frontend:  frontend,
+		Frontend:  config.Frontend,
 	})
 	handlers := newHandlerLifecycle(handler)
 
 	return &Server{
 		httpServer: &http.Server{
-			Addr:     addr,
+			Addr:     config.Addr,
 			Handler:  handlers,
 			ErrorLog: zap.NewStdLog(log.Named("http")),
 		},
@@ -147,7 +138,3 @@ func (s *Server) Close() error {
 	}
 	return nil
 }
-
-// _ unused import guard so scs is referenced even if we stop using it
-// directly in this file in the future.
-var _ *scs.SessionManager
