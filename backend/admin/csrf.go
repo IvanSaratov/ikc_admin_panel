@@ -84,8 +84,8 @@ func resolveCSRFKey(raw string, log *zap.Logger) ([]byte, error) {
 		return key, nil
 	}
 
-	// Missing env: generate per-process key with a WARN log line so
-	// operators notice the session will not survive restart.
+	// Missing key: generate a per-process key with a WARN log line so
+	// operators know CSRF tokens will not remain valid across restarts.
 	buf := make([]byte, csrfKeyLength)
 	if _, err := rand.Read(buf); err != nil {
 		return nil, fmt.Errorf("generate csrf key: %w", err)
