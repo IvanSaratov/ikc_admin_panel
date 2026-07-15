@@ -7,8 +7,8 @@ Use the compose stack as the canonical app run:
 ```bash
 cd infra
 cp .env.example .env
-# Edit .env locally and set MINTRUD_ADMIN_BOOTSTRAP_PASSWORD.
-# Keep MINTRUD_ADMIN_PLAINTEXT_CSRF=true for local plain HTTP.
+# Edit .env locally and set IKC_SERVER_BOOTSTRAP_PASSWORD.
+# Keep IKC_SERVER_PLAINTEXT_CSRF=true for local plain HTTP.
 DOCKER_BUILDKIT=1 docker compose up --build -d
 ```
 
@@ -27,7 +27,7 @@ docker compose logs --tail=80 app
 curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8081/login
 ```
 
-`docker compose down` stops the app and keeps the `mintrud_data` SQLite
+`docker compose down` stops the app and keeps the `ikc_data` SQLite
 volume. `docker compose down -v` wipes the local database.
 
 ## Secrets and public git hygiene
