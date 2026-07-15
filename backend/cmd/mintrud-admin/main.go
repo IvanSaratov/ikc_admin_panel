@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	stdlog "log"
 	"os"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/platform/logging"
@@ -24,7 +23,6 @@ func main() {
 
 	restoreStdLog := zap.RedirectStdLog(logger.Named("stdlog"))
 	defer restoreStdLog()
-	stdlog.SetFlags(0)
 
 	if err := runCommand(context.Background(), os.Args[1:], os.Stdout, logger); err != nil {
 		logger.Error("Mintrud Admin stopped with error", zap.Error(err))
