@@ -52,23 +52,109 @@ type GenerationRun struct {
 }
 
 type Import struct {
-	ID              int64          `json:"id"`
-	SourceType      string         `json:"source_type"`
-	SourceFileName  sql.NullString `json:"source_file_name"`
-	SourceSha256    sql.NullString `json:"source_sha256"`
-	UploadedByActor string         `json:"uploaded_by_actor"`
-	ReceivedAt      string         `json:"received_at"`
-	Status          string         `json:"status"`
-	CreatedAt       string         `json:"created_at"`
-	UpdatedAt       string         `json:"updated_at"`
+	ID                int64          `json:"id"`
+	Profile           string         `json:"profile"`
+	SourceFileName    sql.NullString `json:"source_file_name"`
+	SourceSha256      sql.NullString `json:"source_sha256"`
+	SourceSizeBytes   sql.NullInt64  `json:"source_size_bytes"`
+	IdempotencyKey    sql.NullString `json:"idempotency_key"`
+	UploadedByActor   string         `json:"uploaded_by_actor"`
+	ReceivedAt        string         `json:"received_at"`
+	Status            string         `json:"status"`
+	Phase             sql.NullString `json:"phase"`
+	TempFileToken     sql.NullString `json:"temp_file_token"`
+	TempFileExpiresAt sql.NullString `json:"temp_file_expires_at"`
+	LeaseOwner        sql.NullString `json:"lease_owner"`
+	LeaseExpiresAt    sql.NullString `json:"lease_expires_at"`
+	HeartbeatAt       sql.NullString `json:"heartbeat_at"`
+	Attempt           int64          `json:"attempt"`
+	RowsTotal         int64          `json:"rows_total"`
+	RowsProcessed     int64          `json:"rows_processed"`
+	RowsApplied       int64          `json:"rows_applied"`
+	RowsDuplicate     int64          `json:"rows_duplicate"`
+	RowsNeedsReview   int64          `json:"rows_needs_review"`
+	ErrorCode         sql.NullString `json:"error_code"`
+	ErrorDetail       sql.NullString `json:"error_detail"`
+	StartedAt         sql.NullString `json:"started_at"`
+	StagedAt          sql.NullString `json:"staged_at"`
+	CompletedAt       sql.NullString `json:"completed_at"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
 }
 
 type ImportRow struct {
 	ID        int64  `json:"id"`
 	ImportID  int64  `json:"import_id"`
+	SheetName string `json:"sheet_name"`
 	RowNumber int64  `json:"row_number"`
 	RawData   string `json:"raw_data"`
 	CreatedAt string `json:"created_at"`
+}
+
+type ImportRowIssue struct {
+	ID              int64          `json:"id"`
+	ImportRowID     int64          `json:"import_row_id"`
+	Field           string         `json:"field"`
+	Code            string         `json:"code"`
+	Severity        string         `json:"severity"`
+	Message         string         `json:"message"`
+	Resolution      sql.NullString `json:"resolution"`
+	ResolvedByActor sql.NullString `json:"resolved_by_actor"`
+	ResolvedAt      sql.NullString `json:"resolved_at"`
+	CreatedAt       string         `json:"created_at"`
+	UpdatedAt       string         `json:"updated_at"`
+}
+
+type ImportSheet struct {
+	ID           int64  `json:"id"`
+	ImportID     int64  `json:"import_id"`
+	SheetName    string `json:"sheet_name"`
+	SheetOrder   int64  `json:"sheet_order"`
+	SheetProfile string `json:"sheet_profile"`
+	HeaderMap    string `json:"header_map"`
+	RowsFound    int64  `json:"rows_found"`
+	RowsStaged   int64  `json:"rows_staged"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+type LegacyImportRow struct {
+	ImportRowID           int64          `json:"import_row_id"`
+	SourceFingerprint     string         `json:"source_fingerprint"`
+	EmployerName          sql.NullString `json:"employer_name"`
+	InnNormalized         sql.NullString `json:"inn_normalized"`
+	LastName              sql.NullString `json:"last_name"`
+	FirstName             sql.NullString `json:"first_name"`
+	MiddleName            sql.NullString `json:"middle_name"`
+	SnilsNormalized       sql.NullString `json:"snils_normalized"`
+	EmailNormalized       sql.NullString `json:"email_normalized"`
+	Position              sql.NullString `json:"position"`
+	Department            sql.NullString `json:"department"`
+	ProgramText           sql.NullString `json:"program_text"`
+	TrainingStartDate     sql.NullString `json:"training_start_date"`
+	TrainingEndDate       sql.NullString `json:"training_end_date"`
+	ProtocolNumber        sql.NullString `json:"protocol_number"`
+	ProtocolDate          sql.NullString `json:"protocol_date"`
+	AssessmentResult      sql.NullString `json:"assessment_result"`
+	MintrudRegistryNumber sql.NullString `json:"mintrud_registry_number"`
+	SourceReference       sql.NullString `json:"source_reference"`
+	MoodleUsername        sql.NullString `json:"moodle_username"`
+	MoodleEmail           sql.NullString `json:"moodle_email"`
+	ExtraFields           string         `json:"extra_fields"`
+	Status                string         `json:"status"`
+	Version               int64          `json:"version"`
+	EmployerID            sql.NullInt64  `json:"employer_id"`
+	WorkerID              sql.NullInt64  `json:"worker_id"`
+	WorkerEmployerID      sql.NullInt64  `json:"worker_employer_id"`
+	ProgramID             sql.NullInt64  `json:"program_id"`
+	ClientRequestID       sql.NullInt64  `json:"client_request_id"`
+	TrainingRecordID      sql.NullInt64  `json:"training_record_id"`
+	ProtocolID            sql.NullInt64  `json:"protocol_id"`
+	ProtocolParticipantID sql.NullInt64  `json:"protocol_participant_id"`
+	MoodleAccountID       sql.NullInt64  `json:"moodle_account_id"`
+	CreatedAt             string         `json:"created_at"`
+	UpdatedAt             string         `json:"updated_at"`
 }
 
 type MoodleAccount struct {
@@ -94,6 +180,16 @@ type Program struct {
 	Status         string         `json:"status"`
 	CreatedAt      string         `json:"created_at"`
 	UpdatedAt      string         `json:"updated_at"`
+}
+
+type ProgramAlias struct {
+	ID              int64  `json:"id"`
+	Profile         string `json:"profile"`
+	SheetProfile    string `json:"sheet_profile"`
+	AliasNormalized string `json:"alias_normalized"`
+	ProgramID       int64  `json:"program_id"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
 }
 
 type ProgramGroup struct {
@@ -130,6 +226,7 @@ type ProtocolParticipant struct {
 	RequiresMintrudTestConfirmedAt sql.NullString `json:"requires_mintrud_test_confirmed_at"`
 	MintrudRegistryNumber          sql.NullString `json:"mintrud_registry_number"`
 	MintrudRegistryEnteredAt       sql.NullString `json:"mintrud_registry_entered_at"`
+	AssessmentResult               sql.NullString `json:"assessment_result"`
 	CreatedAt                      string         `json:"created_at"`
 	UpdatedAt                      string         `json:"updated_at"`
 }
@@ -170,6 +267,8 @@ type TrainingRecord struct {
 	ProgramID           int64          `json:"program_id"`
 	ClientRequestID     sql.NullInt64  `json:"client_request_id"`
 	Position            string         `json:"position"`
+	Department          sql.NullString `json:"department"`
+	SourceReference     sql.NullString `json:"source_reference"`
 	Hours               int64          `json:"hours"`
 	RequiresMintrudTest int64          `json:"requires_mintrud_test"`
 	MoodleStatus        string         `json:"moodle_status"`
@@ -205,11 +304,12 @@ type Worker struct {
 }
 
 type WorkerEmployer struct {
-	ID              int64  `json:"id"`
-	WorkerID        int64  `json:"worker_id"`
-	EmployerID      int64  `json:"employer_id"`
-	CurrentPosition string `json:"current_position"`
-	Status          string `json:"status"`
-	CreatedAt       string `json:"created_at"`
-	UpdatedAt       string `json:"updated_at"`
+	ID                int64          `json:"id"`
+	WorkerID          int64          `json:"worker_id"`
+	EmployerID        int64          `json:"employer_id"`
+	CurrentPosition   string         `json:"current_position"`
+	CurrentDepartment sql.NullString `json:"current_department"`
+	Status            string         `json:"status"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
 }

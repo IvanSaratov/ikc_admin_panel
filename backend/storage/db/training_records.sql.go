@@ -24,7 +24,7 @@ INSERT INTO training_records (
   updated_at
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, worker_employer_id, program_id, client_request_id, position, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
+RETURNING id, worker_employer_id, program_id, client_request_id, position, department, source_reference, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
 `
 
 type CreateTrainingRecordParams struct {
@@ -60,6 +60,8 @@ func (q *Queries) CreateTrainingRecord(ctx context.Context, arg CreateTrainingRe
 		&i.ProgramID,
 		&i.ClientRequestID,
 		&i.Position,
+		&i.Department,
+		&i.SourceReference,
 		&i.Hours,
 		&i.RequiresMintrudTest,
 		&i.MoodleStatus,
@@ -73,7 +75,7 @@ func (q *Queries) CreateTrainingRecord(ctx context.Context, arg CreateTrainingRe
 }
 
 const findActiveTrainingRecord = `-- name: FindActiveTrainingRecord :one
-SELECT id, worker_employer_id, program_id, client_request_id, position, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
+SELECT id, worker_employer_id, program_id, client_request_id, position, department, source_reference, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
 FROM training_records
 WHERE worker_employer_id = ?
   AND program_id = ?
@@ -98,6 +100,8 @@ func (q *Queries) FindActiveTrainingRecord(ctx context.Context, arg FindActiveTr
 		&i.ProgramID,
 		&i.ClientRequestID,
 		&i.Position,
+		&i.Department,
+		&i.SourceReference,
 		&i.Hours,
 		&i.RequiresMintrudTest,
 		&i.MoodleStatus,
@@ -111,7 +115,7 @@ func (q *Queries) FindActiveTrainingRecord(ctx context.Context, arg FindActiveTr
 }
 
 const getTrainingRecord = `-- name: GetTrainingRecord :one
-SELECT id, worker_employer_id, program_id, client_request_id, position, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
+SELECT id, worker_employer_id, program_id, client_request_id, position, department, source_reference, hours, requires_mintrud_test, moodle_status, moodle_error, moodle_enrolled_at, status, created_at, updated_at
 FROM training_records
 WHERE id = ?
 `
@@ -125,6 +129,8 @@ func (q *Queries) GetTrainingRecord(ctx context.Context, id int64) (TrainingReco
 		&i.ProgramID,
 		&i.ClientRequestID,
 		&i.Position,
+		&i.Department,
+		&i.SourceReference,
 		&i.Hours,
 		&i.RequiresMintrudTest,
 		&i.MoodleStatus,

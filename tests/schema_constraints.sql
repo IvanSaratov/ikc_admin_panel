@@ -176,6 +176,63 @@ VALUES (
   '2026-05-27T00:00:00Z'
 );
 
+-- name: test_import_status_rejects_invalid
+INSERT INTO imports (
+  profile, uploaded_by_actor, received_at, status, created_at, updated_at
+)
+VALUES (
+  'legacy_registry', 'admin', '2026-05-27T00:00:00Z', 'unknown',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_import_rows_duplicate_sheet_coordinate
+INSERT INTO import_rows (import_id, sheet_name, row_number, raw_data, created_at)
+VALUES (1, 'А', 1, '{}', '2026-05-27T00:00:00Z');
+
+-- name: test_import_rows_same_number_different_sheet
+INSERT INTO import_rows (import_id, sheet_name, row_number, raw_data, created_at)
+VALUES (1, 'Б', 1, '{}', '2026-05-27T00:00:00Z');
+
+-- name: test_program_alias_duplicate_scope
+INSERT INTO program_aliases (
+  profile, sheet_profile, alias_normalized, program_id, created_at, updated_at
+)
+VALUES (
+  'legacy_registry', 'А', 'program a-1', 1,
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_import_active_sha_rejects_duplicate
+INSERT INTO imports (
+  profile, source_sha256, uploaded_by_actor, received_at, status, created_at, updated_at
+)
+VALUES (
+  'legacy_registry',
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  'admin', '2026-05-27T00:00:00Z', 'queued',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_import_failed_sha_allows_reupload
+INSERT INTO imports (
+  profile, source_sha256, uploaded_by_actor, received_at, status, created_at, updated_at
+)
+VALUES (
+  'legacy_registry',
+  'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  'admin', '2026-05-27T00:00:00Z', 'failed',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+INSERT INTO imports (
+  profile, source_sha256, uploaded_by_actor, received_at, status, created_at, updated_at
+)
+VALUES (
+  'legacy_registry',
+  'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  'admin', '2026-05-27T00:00:00Z', 'queued',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
 -- name: test_protocols_unique_group_year_seq_suffix
 -- schema_smoke inserts protocol id=1 (program_group_id=1, year=2026,
 -- seq=14, suffix=NULL) and protocol id=2 (same group/year/seq, suffix='2').
@@ -243,6 +300,50 @@ VALUES (
   '2026-05-27T00:00:00Z',
   '2026-05-27T00:00:00Z',
   '2026-05-27T00:00:00Z'
+);
+
+-- name: test_protocol_number_same_value_different_group_allowed
+INSERT INTO program_groups (code, name, status, created_at, updated_at)
+VALUES ('SECOND', 'Second test group', 'active', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z');
+INSERT INTO protocols (
+  program_group_id,
+  status,
+  training_start_date,
+  training_end_date,
+  protocol_date,
+  sequence_year,
+  protocol_month,
+  annual_sequence_number,
+  protocol_number,
+  fixed_at,
+  created_at,
+  updated_at
+)
+VALUES (
+  2, 'fixed', '2026-05-11', '2026-05-15', '2026-05-15',
+  2026, 5, 14, '2605A14', '2026-05-27T00:00:00Z',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
+);
+
+-- name: test_protocol_number_duplicate_within_group_rejected
+INSERT INTO protocols (
+  program_group_id,
+  status,
+  training_start_date,
+  training_end_date,
+  protocol_date,
+  sequence_year,
+  protocol_month,
+  annual_sequence_number,
+  protocol_number,
+  fixed_at,
+  created_at,
+  updated_at
+)
+VALUES (
+  1, 'fixed', '2026-08-01', '2026-08-05', '2026-08-05',
+  2026, 8, 99, '2605A14', '2026-05-27T00:00:00Z',
+  '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z'
 );
 
 -- 002b additions: status defaults + actor CHECK relax.

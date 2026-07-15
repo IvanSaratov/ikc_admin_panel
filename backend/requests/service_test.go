@@ -206,6 +206,16 @@ func TestImportRows_CreatesRequestRowsAndItems(t *testing.T) {
 	if !got.SourceImportID.Valid {
 		t.Errorf("source_import_id was not set after ImportRows")
 	}
+	importRows, err := q.ListImportRows(ctx, got.SourceImportID.Int64)
+	if err != nil {
+		t.Fatalf("list import rows: %v", err)
+	}
+	if len(importRows) != 2 {
+		t.Fatalf("import rows = %d, want 2", len(importRows))
+	}
+	if importRows[0].SheetName != "Заявка" || importRows[1].SheetName != "Заявка" {
+		t.Fatalf("import row sheets = %q, %q; want Заявка", importRows[0].SheetName, importRows[1].SheetName)
+	}
 }
 
 func TestImportRows_InvalidRowStagedAsInvalid(t *testing.T) {

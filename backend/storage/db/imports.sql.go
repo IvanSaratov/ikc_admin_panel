@@ -10,52 +10,177 @@ import (
 	"database/sql"
 )
 
+const claimNextImport = `-- name: ClaimNextImport :one
+UPDATE imports
+SET status = 'processing',
+    phase = COALESCE(phase, 'parsing'),
+    lease_owner = ?1,
+    lease_expires_at = ?2,
+    heartbeat_at = ?3,
+    attempt = attempt + 1,
+    started_at = COALESCE(started_at, ?3),
+    updated_at = ?3
+WHERE id = (
+  SELECT id
+  FROM imports AS candidate
+  WHERE (
+      candidate.status = 'queued'
+      OR (
+        candidate.status = 'processing'
+        AND (
+          candidate.lease_expires_at IS NULL
+          OR candidate.lease_expires_at < ?3
+        )
+      )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM imports AS active
+      WHERE active.status = 'processing'
+        AND active.lease_expires_at >= ?3
+    )
+  ORDER BY id ASC
+  LIMIT 1
+)
+RETURNING id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
+`
+
+type ClaimNextImportParams struct {
+	LeaseOwner     sql.NullString `json:"lease_owner"`
+	LeaseExpiresAt sql.NullString `json:"lease_expires_at"`
+	Now            sql.NullString `json:"now"`
+}
+
+func (q *Queries) ClaimNextImport(ctx context.Context, arg ClaimNextImportParams) (Import, error) {
+	row := q.db.QueryRowContext(ctx, claimNextImport, arg.LeaseOwner, arg.LeaseExpiresAt, arg.Now)
+	var i Import
+	err := row.Scan(
+		&i.ID,
+		&i.Profile,
+		&i.SourceFileName,
+		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
+		&i.UploadedByActor,
+		&i.ReceivedAt,
+		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const countImportsAhead = `-- name: CountImportsAhead :one
+SELECT COUNT(*)
+FROM imports
+WHERE id < ?1
+  AND status IN ('queued', 'processing')
+`
+
+func (q *Queries) CountImportsAhead(ctx context.Context, importID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countImportsAhead, importID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createImport = `-- name: CreateImport :one
 INSERT INTO imports (
-  source_type,
+  profile,
   source_file_name,
   source_sha256,
+  source_size_bytes,
+  idempotency_key,
   uploaded_by_actor,
   received_at,
   status,
+  phase,
+  temp_file_token,
+  temp_file_expires_at,
   created_at,
   updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, source_type, source_file_name, source_sha256, uploaded_by_actor, received_at, status, created_at, updated_at
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
 `
 
 type CreateImportParams struct {
-	SourceType      string         `json:"source_type"`
-	SourceFileName  sql.NullString `json:"source_file_name"`
-	SourceSha256    sql.NullString `json:"source_sha256"`
-	UploadedByActor string         `json:"uploaded_by_actor"`
-	ReceivedAt      string         `json:"received_at"`
-	Status          string         `json:"status"`
-	CreatedAt       string         `json:"created_at"`
-	UpdatedAt       string         `json:"updated_at"`
+	Profile           string         `json:"profile"`
+	SourceFileName    sql.NullString `json:"source_file_name"`
+	SourceSha256      sql.NullString `json:"source_sha256"`
+	SourceSizeBytes   sql.NullInt64  `json:"source_size_bytes"`
+	IdempotencyKey    sql.NullString `json:"idempotency_key"`
+	UploadedByActor   string         `json:"uploaded_by_actor"`
+	ReceivedAt        string         `json:"received_at"`
+	Status            string         `json:"status"`
+	Phase             sql.NullString `json:"phase"`
+	TempFileToken     sql.NullString `json:"temp_file_token"`
+	TempFileExpiresAt sql.NullString `json:"temp_file_expires_at"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
 }
 
 func (q *Queries) CreateImport(ctx context.Context, arg CreateImportParams) (Import, error) {
 	row := q.db.QueryRowContext(ctx, createImport,
-		arg.SourceType,
+		arg.Profile,
 		arg.SourceFileName,
 		arg.SourceSha256,
+		arg.SourceSizeBytes,
+		arg.IdempotencyKey,
 		arg.UploadedByActor,
 		arg.ReceivedAt,
 		arg.Status,
+		arg.Phase,
+		arg.TempFileToken,
+		arg.TempFileExpiresAt,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 	var i Import
 	err := row.Scan(
 		&i.ID,
-		&i.SourceType,
+		&i.Profile,
 		&i.SourceFileName,
 		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
 		&i.UploadedByActor,
 		&i.ReceivedAt,
 		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -65,16 +190,18 @@ func (q *Queries) CreateImport(ctx context.Context, arg CreateImportParams) (Imp
 const createImportRow = `-- name: CreateImportRow :one
 INSERT INTO import_rows (
   import_id,
+  sheet_name,
   row_number,
   raw_data,
   created_at
 )
-VALUES (?, ?, ?, ?)
-RETURNING id, import_id, row_number, raw_data, created_at
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, import_id, sheet_name, row_number, raw_data, created_at
 `
 
 type CreateImportRowParams struct {
 	ImportID  int64  `json:"import_id"`
+	SheetName string `json:"sheet_name"`
 	RowNumber int64  `json:"row_number"`
 	RawData   string `json:"raw_data"`
 	CreatedAt string `json:"created_at"`
@@ -83,6 +210,7 @@ type CreateImportRowParams struct {
 func (q *Queries) CreateImportRow(ctx context.Context, arg CreateImportRowParams) (ImportRow, error) {
 	row := q.db.QueryRowContext(ctx, createImportRow,
 		arg.ImportID,
+		arg.SheetName,
 		arg.RowNumber,
 		arg.RawData,
 		arg.CreatedAt,
@@ -91,6 +219,7 @@ func (q *Queries) CreateImportRow(ctx context.Context, arg CreateImportRowParams
 	err := row.Scan(
 		&i.ID,
 		&i.ImportID,
+		&i.SheetName,
 		&i.RowNumber,
 		&i.RawData,
 		&i.CreatedAt,
@@ -98,8 +227,54 @@ func (q *Queries) CreateImportRow(ctx context.Context, arg CreateImportRowParams
 	return i, err
 }
 
+const findExistingLegacyImportBySHA256 = `-- name: FindExistingLegacyImportBySHA256 :one
+SELECT id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
+FROM imports
+WHERE profile = 'legacy_registry'
+  AND source_sha256 = ?
+  AND status IN ('queued', 'processing', 'completed', 'completed_with_issues')
+ORDER BY id DESC
+LIMIT 1
+`
+
+func (q *Queries) FindExistingLegacyImportBySHA256(ctx context.Context, sourceSha256 sql.NullString) (Import, error) {
+	row := q.db.QueryRowContext(ctx, findExistingLegacyImportBySHA256, sourceSha256)
+	var i Import
+	err := row.Scan(
+		&i.ID,
+		&i.Profile,
+		&i.SourceFileName,
+		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
+		&i.UploadedByActor,
+		&i.ReceivedAt,
+		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getImportByID = `-- name: GetImportByID :one
-SELECT id, source_type, source_file_name, source_sha256, uploaded_by_actor, received_at, status, created_at, updated_at
+SELECT id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
 FROM imports
 WHERE id = ?
 LIMIT 1
@@ -110,12 +285,74 @@ func (q *Queries) GetImportByID(ctx context.Context, id int64) (Import, error) {
 	var i Import
 	err := row.Scan(
 		&i.ID,
-		&i.SourceType,
+		&i.Profile,
 		&i.SourceFileName,
 		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
 		&i.UploadedByActor,
 		&i.ReceivedAt,
 		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getImportByIdempotencyKey = `-- name: GetImportByIdempotencyKey :one
+SELECT id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
+FROM imports
+WHERE idempotency_key = ?
+LIMIT 1
+`
+
+func (q *Queries) GetImportByIdempotencyKey(ctx context.Context, idempotencyKey sql.NullString) (Import, error) {
+	row := q.db.QueryRowContext(ctx, getImportByIdempotencyKey, idempotencyKey)
+	var i Import
+	err := row.Scan(
+		&i.ID,
+		&i.Profile,
+		&i.SourceFileName,
+		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
+		&i.UploadedByActor,
+		&i.ReceivedAt,
+		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -123,7 +360,7 @@ func (q *Queries) GetImportByID(ctx context.Context, id int64) (Import, error) {
 }
 
 const getImportRowByID = `-- name: GetImportRowByID :one
-SELECT id, import_id, row_number, raw_data, created_at
+SELECT id, import_id, sheet_name, row_number, raw_data, created_at
 FROM import_rows
 WHERE id = ?
 LIMIT 1
@@ -135,6 +372,7 @@ func (q *Queries) GetImportRowByID(ctx context.Context, id int64) (ImportRow, er
 	err := row.Scan(
 		&i.ID,
 		&i.ImportID,
+		&i.SheetName,
 		&i.RowNumber,
 		&i.RawData,
 		&i.CreatedAt,
@@ -143,10 +381,15 @@ func (q *Queries) GetImportRowByID(ctx context.Context, id int64) (ImportRow, er
 }
 
 const listImportRows = `-- name: ListImportRows :many
-SELECT id, import_id, row_number, raw_data, created_at
+SELECT import_rows.id, import_rows.import_id, import_rows.sheet_name, import_rows.row_number, import_rows.raw_data, import_rows.created_at
 FROM import_rows
-WHERE import_id = ?
-ORDER BY row_number ASC, id ASC
+LEFT JOIN import_sheets
+  ON import_sheets.import_id = import_rows.import_id
+ AND import_sheets.sheet_name = import_rows.sheet_name
+WHERE import_rows.import_id = ?
+ORDER BY COALESCE(import_sheets.sheet_order, 0) ASC,
+         import_rows.row_number ASC,
+         import_rows.id ASC
 `
 
 func (q *Queries) ListImportRows(ctx context.Context, importID int64) ([]ImportRow, error) {
@@ -161,6 +404,7 @@ func (q *Queries) ListImportRows(ctx context.Context, importID int64) ([]ImportR
 		if err := rows.Scan(
 			&i.ID,
 			&i.ImportID,
+			&i.SheetName,
 			&i.RowNumber,
 			&i.RawData,
 			&i.CreatedAt,
@@ -178,14 +422,21 @@ func (q *Queries) ListImportRows(ctx context.Context, importID int64) ([]ImportR
 	return items, nil
 }
 
-const listImports = `-- name: ListImports :many
-SELECT id, source_type, source_file_name, source_sha256, uploaded_by_actor, received_at, status, created_at, updated_at
+const listImportsPage = `-- name: ListImportsPage :many
+SELECT id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
 FROM imports
-ORDER BY received_at DESC, id DESC
+WHERE id < ?1 OR ?1 = 0
+ORDER BY id DESC
+LIMIT ?2
 `
 
-func (q *Queries) ListImports(ctx context.Context) ([]Import, error) {
-	rows, err := q.db.QueryContext(ctx, listImports)
+type ListImportsPageParams struct {
+	BeforeID int64 `json:"before_id"`
+	PageSize int64 `json:"page_size"`
+}
+
+func (q *Queries) ListImportsPage(ctx context.Context, arg ListImportsPageParams) ([]Import, error) {
+	rows, err := q.db.QueryContext(ctx, listImportsPage, arg.BeforeID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -195,12 +446,31 @@ func (q *Queries) ListImports(ctx context.Context) ([]Import, error) {
 		var i Import
 		if err := rows.Scan(
 			&i.ID,
-			&i.SourceType,
+			&i.Profile,
 			&i.SourceFileName,
 			&i.SourceSha256,
+			&i.SourceSizeBytes,
+			&i.IdempotencyKey,
 			&i.UploadedByActor,
 			&i.ReceivedAt,
 			&i.Status,
+			&i.Phase,
+			&i.TempFileToken,
+			&i.TempFileExpiresAt,
+			&i.LeaseOwner,
+			&i.LeaseExpiresAt,
+			&i.HeartbeatAt,
+			&i.Attempt,
+			&i.RowsTotal,
+			&i.RowsProcessed,
+			&i.RowsApplied,
+			&i.RowsDuplicate,
+			&i.RowsNeedsReview,
+			&i.ErrorCode,
+			&i.ErrorDetail,
+			&i.StartedAt,
+			&i.StagedAt,
+			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -217,20 +487,151 @@ func (q *Queries) ListImports(ctx context.Context) ([]Import, error) {
 	return items, nil
 }
 
-const updateImportStatus = `-- name: UpdateImportStatus :exec
+const updateImportProgress = `-- name: UpdateImportProgress :one
 UPDATE imports
-SET status = ?,
+SET rows_total = ?,
+    rows_processed = ?,
+    rows_applied = ?,
+    rows_duplicate = ?,
+    rows_needs_review = ?,
+    heartbeat_at = ?,
+    lease_expires_at = ?,
     updated_at = ?
-WHERE id = ?
+WHERE id = ? AND lease_owner = ?
+RETURNING id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
 `
 
-type UpdateImportStatusParams struct {
-	Status    string `json:"status"`
-	UpdatedAt string `json:"updated_at"`
-	ID        int64  `json:"id"`
+type UpdateImportProgressParams struct {
+	RowsTotal       int64          `json:"rows_total"`
+	RowsProcessed   int64          `json:"rows_processed"`
+	RowsApplied     int64          `json:"rows_applied"`
+	RowsDuplicate   int64          `json:"rows_duplicate"`
+	RowsNeedsReview int64          `json:"rows_needs_review"`
+	HeartbeatAt     sql.NullString `json:"heartbeat_at"`
+	LeaseExpiresAt  sql.NullString `json:"lease_expires_at"`
+	UpdatedAt       string         `json:"updated_at"`
+	ID              int64          `json:"id"`
+	LeaseOwner      sql.NullString `json:"lease_owner"`
 }
 
-func (q *Queries) UpdateImportStatus(ctx context.Context, arg UpdateImportStatusParams) error {
-	_, err := q.db.ExecContext(ctx, updateImportStatus, arg.Status, arg.UpdatedAt, arg.ID)
-	return err
+func (q *Queries) UpdateImportProgress(ctx context.Context, arg UpdateImportProgressParams) (Import, error) {
+	row := q.db.QueryRowContext(ctx, updateImportProgress,
+		arg.RowsTotal,
+		arg.RowsProcessed,
+		arg.RowsApplied,
+		arg.RowsDuplicate,
+		arg.RowsNeedsReview,
+		arg.HeartbeatAt,
+		arg.LeaseExpiresAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.LeaseOwner,
+	)
+	var i Import
+	err := row.Scan(
+		&i.ID,
+		&i.Profile,
+		&i.SourceFileName,
+		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
+		&i.UploadedByActor,
+		&i.ReceivedAt,
+		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateImportState = `-- name: UpdateImportState :one
+UPDATE imports
+SET status = ?,
+    phase = ?,
+    error_code = ?,
+    error_detail = ?,
+    staged_at = ?,
+    completed_at = ?,
+    lease_owner = ?,
+    lease_expires_at = ?,
+    updated_at = ?
+WHERE id = ?
+RETURNING id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
+`
+
+type UpdateImportStateParams struct {
+	Status         string         `json:"status"`
+	Phase          sql.NullString `json:"phase"`
+	ErrorCode      sql.NullString `json:"error_code"`
+	ErrorDetail    sql.NullString `json:"error_detail"`
+	StagedAt       sql.NullString `json:"staged_at"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	LeaseOwner     sql.NullString `json:"lease_owner"`
+	LeaseExpiresAt sql.NullString `json:"lease_expires_at"`
+	UpdatedAt      string         `json:"updated_at"`
+	ID             int64          `json:"id"`
+}
+
+func (q *Queries) UpdateImportState(ctx context.Context, arg UpdateImportStateParams) (Import, error) {
+	row := q.db.QueryRowContext(ctx, updateImportState,
+		arg.Status,
+		arg.Phase,
+		arg.ErrorCode,
+		arg.ErrorDetail,
+		arg.StagedAt,
+		arg.CompletedAt,
+		arg.LeaseOwner,
+		arg.LeaseExpiresAt,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i Import
+	err := row.Scan(
+		&i.ID,
+		&i.Profile,
+		&i.SourceFileName,
+		&i.SourceSha256,
+		&i.SourceSizeBytes,
+		&i.IdempotencyKey,
+		&i.UploadedByActor,
+		&i.ReceivedAt,
+		&i.Status,
+		&i.Phase,
+		&i.TempFileToken,
+		&i.TempFileExpiresAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.HeartbeatAt,
+		&i.Attempt,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

@@ -2,7 +2,7 @@
 -- Active participants for a protocol. Used by the detail view.
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE protocol_id = ? AND status = 'active'
 ORDER BY id ASC;
@@ -11,7 +11,7 @@ ORDER BY id ASC;
 -- Including removed participants (kept for audit). Used by integration tests.
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE protocol_id = ?
 ORDER BY id ASC;
@@ -19,7 +19,7 @@ ORDER BY id ASC;
 -- name: GetProtocolParticipantByID :one
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE id = ?;
 
@@ -30,7 +30,7 @@ WHERE id = ?;
 -- instead of a SQLite constraint failure.
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE training_record_id = ? AND status = 'active'
 LIMIT 1;
@@ -46,7 +46,7 @@ INSERT INTO protocol_participants (
 VALUES (?, ?, 'active', ?, ?)
 RETURNING id, protocol_id, training_record_id, status,
           requires_mintrud_test_confirmed_at, mintrud_registry_number,
-          mintrud_registry_entered_at, created_at, updated_at;
+          mintrud_registry_entered_at, assessment_result, created_at, updated_at;
 
 -- name: MarkParticipantRemoved :one
 -- Soft-delete: flips status to 'removed' instead of physically deleting.
@@ -55,4 +55,4 @@ SET status = 'removed', updated_at = ?
 WHERE id = ? AND status = 'active'
 RETURNING id, protocol_id, training_record_id, status,
           requires_mintrud_test_confirmed_at, mintrud_registry_number,
-          mintrud_registry_entered_at, created_at, updated_at;
+          mintrud_registry_entered_at, assessment_result, created_at, updated_at;

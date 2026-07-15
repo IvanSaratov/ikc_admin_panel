@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createWorkerEmployer = `-- name: CreateWorkerEmployer :one
@@ -19,7 +20,7 @@ INSERT INTO worker_employers (
   updated_at
 )
 VALUES (?, ?, ?, 'active', ?, ?)
-RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+RETURNING id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 `
 
 type CreateWorkerEmployerParams struct {
@@ -44,6 +45,7 @@ func (q *Queries) CreateWorkerEmployer(ctx context.Context, arg CreateWorkerEmpl
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -56,7 +58,7 @@ UPDATE worker_employers
 SET status = 'inactive',
     updated_at = ?
 WHERE id = ?
-RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+RETURNING id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 `
 
 type DeactivateAssignmentParams struct {
@@ -72,6 +74,7 @@ func (q *Queries) DeactivateAssignment(ctx context.Context, arg DeactivateAssign
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -80,7 +83,7 @@ func (q *Queries) DeactivateAssignment(ctx context.Context, arg DeactivateAssign
 }
 
 const findActiveWorkerEmployer = `-- name: FindActiveWorkerEmployer :one
-SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
+SELECT id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 FROM worker_employers
 WHERE worker_id = ?
   AND employer_id = ?
@@ -103,6 +106,7 @@ func (q *Queries) FindActiveWorkerEmployer(ctx context.Context, arg FindActiveWo
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -111,7 +115,7 @@ func (q *Queries) FindActiveWorkerEmployer(ctx context.Context, arg FindActiveWo
 }
 
 const getWorkerEmployer = `-- name: GetWorkerEmployer :one
-SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
+SELECT id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 FROM worker_employers
 WHERE id = ?
 `
@@ -124,6 +128,7 @@ func (q *Queries) GetWorkerEmployer(ctx context.Context, id int64) (WorkerEmploy
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -140,6 +145,7 @@ SELECT
   worker_employers.employer_id,
   employers.canonical_name AS employer_name,
   worker_employers.current_position,
+  worker_employers.current_department,
   worker_employers.status
 FROM worker_employers
 JOIN workers ON workers.id = worker_employers.worker_id
@@ -148,14 +154,15 @@ ORDER BY worker_employers.status, workers.last_name, workers.first_name, employe
 `
 
 type ListWorkerEmployerAssignmentsRow struct {
-	ID              int64  `json:"id"`
-	WorkerID        int64  `json:"worker_id"`
-	WorkerLastName  string `json:"worker_last_name"`
-	WorkerFirstName string `json:"worker_first_name"`
-	EmployerID      int64  `json:"employer_id"`
-	EmployerName    string `json:"employer_name"`
-	CurrentPosition string `json:"current_position"`
-	Status          string `json:"status"`
+	ID                int64          `json:"id"`
+	WorkerID          int64          `json:"worker_id"`
+	WorkerLastName    string         `json:"worker_last_name"`
+	WorkerFirstName   string         `json:"worker_first_name"`
+	EmployerID        int64          `json:"employer_id"`
+	EmployerName      string         `json:"employer_name"`
+	CurrentPosition   string         `json:"current_position"`
+	CurrentDepartment sql.NullString `json:"current_department"`
+	Status            string         `json:"status"`
 }
 
 func (q *Queries) ListWorkerEmployerAssignments(ctx context.Context) ([]ListWorkerEmployerAssignmentsRow, error) {
@@ -175,6 +182,7 @@ func (q *Queries) ListWorkerEmployerAssignments(ctx context.Context) ([]ListWork
 			&i.EmployerID,
 			&i.EmployerName,
 			&i.CurrentPosition,
+			&i.CurrentDepartment,
 			&i.Status,
 		); err != nil {
 			return nil, err
@@ -191,7 +199,7 @@ func (q *Queries) ListWorkerEmployerAssignments(ctx context.Context) ([]ListWork
 }
 
 const listWorkerEmployersForWorker = `-- name: ListWorkerEmployersForWorker :many
-SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
+SELECT id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 FROM worker_employers
 WHERE worker_id = ?
 ORDER BY status, updated_at DESC
@@ -211,6 +219,7 @@ func (q *Queries) ListWorkerEmployersForWorker(ctx context.Context, workerID int
 			&i.WorkerID,
 			&i.EmployerID,
 			&i.CurrentPosition,
+			&i.CurrentDepartment,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -229,7 +238,7 @@ func (q *Queries) ListWorkerEmployersForWorker(ctx context.Context, workerID int
 }
 
 const listWorkersForEmployer = `-- name: ListWorkersForEmployer :many
-SELECT id, worker_id, employer_id, current_position, status, created_at, updated_at
+SELECT id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 FROM worker_employers
 WHERE employer_id = ?
 ORDER BY status, updated_at DESC
@@ -249,6 +258,7 @@ func (q *Queries) ListWorkersForEmployer(ctx context.Context, employerID int64) 
 			&i.WorkerID,
 			&i.EmployerID,
 			&i.CurrentPosition,
+			&i.CurrentDepartment,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -271,7 +281,7 @@ UPDATE worker_employers
 SET status = ?,
     updated_at = ?
 WHERE id = ?
-RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+RETURNING id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 `
 
 type SetWorkerEmployerStatusParams struct {
@@ -288,6 +298,7 @@ func (q *Queries) SetWorkerEmployerStatus(ctx context.Context, arg SetWorkerEmpl
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -301,7 +312,7 @@ SET employer_id = ?,
     current_position = ?,
     updated_at = ?
 WHERE id = ?
-RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+RETURNING id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 `
 
 type UpdateAssignmentParams struct {
@@ -324,6 +335,7 @@ func (q *Queries) UpdateAssignment(ctx context.Context, arg UpdateAssignmentPara
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -337,7 +349,7 @@ SET employer_id = ?,
     current_position = ?,
     updated_at = ?
 WHERE id = ?
-RETURNING id, worker_id, employer_id, current_position, status, created_at, updated_at
+RETURNING id, worker_id, employer_id, current_position, current_department, status, created_at, updated_at
 `
 
 type UpdateWorkerEmployerParams struct {
@@ -360,6 +372,7 @@ func (q *Queries) UpdateWorkerEmployer(ctx context.Context, arg UpdateWorkerEmpl
 		&i.WorkerID,
 		&i.EmployerID,
 		&i.CurrentPosition,
+		&i.CurrentDepartment,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,

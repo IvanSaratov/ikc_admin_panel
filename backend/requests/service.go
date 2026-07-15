@@ -183,14 +183,19 @@ func (s *Service) ImportRows(ctx context.Context, requestID int64, xlsxData []by
 
 	now := s.timestamp()
 	imp, err := s.queries.CreateImport(ctx, storagedb.CreateImportParams{
-		SourceType:      "xlsx",
-		SourceFileName:  nullableString(fileName),
-		SourceSha256:    nullableString(hashHex),
-		UploadedByActor: "operator",
-		ReceivedAt:      now,
-		Status:          "completed",
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		Profile:           "client_request",
+		SourceFileName:    nullableString(fileName),
+		SourceSha256:      nullableString(hashHex),
+		SourceSizeBytes:   sql.NullInt64{Int64: int64(len(xlsxData)), Valid: true},
+		IdempotencyKey:    sql.NullString{},
+		UploadedByActor:   "operator",
+		ReceivedAt:        now,
+		Status:            "completed",
+		Phase:             sql.NullString{},
+		TempFileToken:     sql.NullString{},
+		TempFileExpiresAt: sql.NullString{},
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	})
 	if err != nil {
 		return ImportResult{}, fmt.Errorf("create import: %w", err)
@@ -210,6 +215,7 @@ func (s *Service) ImportRows(ctx context.Context, requestID int64, xlsxData []by
 		rawJSON := rawRowJSON(p)
 		if _, err := s.queries.CreateImportRow(ctx, storagedb.CreateImportRowParams{
 			ImportID:  imp.ID,
+			SheetName: "Заявка",
 			RowNumber: p.RowNumber,
 			RawData:   rawJSON,
 			CreatedAt: now,

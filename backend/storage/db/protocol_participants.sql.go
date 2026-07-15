@@ -20,7 +20,7 @@ INSERT INTO protocol_participants (
 VALUES (?, ?, 'active', ?, ?)
 RETURNING id, protocol_id, training_record_id, status,
           requires_mintrud_test_confirmed_at, mintrud_registry_number,
-          mintrud_registry_entered_at, created_at, updated_at
+          mintrud_registry_entered_at, assessment_result, created_at, updated_at
 `
 
 type CreateProtocolParticipantParams struct {
@@ -46,6 +46,7 @@ func (q *Queries) CreateProtocolParticipant(ctx context.Context, arg CreateProto
 		&i.RequiresMintrudTestConfirmedAt,
 		&i.MintrudRegistryNumber,
 		&i.MintrudRegistryEnteredAt,
+		&i.AssessmentResult,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -55,7 +56,7 @@ func (q *Queries) CreateProtocolParticipant(ctx context.Context, arg CreateProto
 const getActiveParticipantForTrainingRecord = `-- name: GetActiveParticipantForTrainingRecord :one
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE training_record_id = ? AND status = 'active'
 LIMIT 1
@@ -76,6 +77,7 @@ func (q *Queries) GetActiveParticipantForTrainingRecord(ctx context.Context, tra
 		&i.RequiresMintrudTestConfirmedAt,
 		&i.MintrudRegistryNumber,
 		&i.MintrudRegistryEnteredAt,
+		&i.AssessmentResult,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -85,7 +87,7 @@ func (q *Queries) GetActiveParticipantForTrainingRecord(ctx context.Context, tra
 const getProtocolParticipantByID = `-- name: GetProtocolParticipantByID :one
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE id = ?
 `
@@ -101,6 +103,7 @@ func (q *Queries) GetProtocolParticipantByID(ctx context.Context, id int64) (Pro
 		&i.RequiresMintrudTestConfirmedAt,
 		&i.MintrudRegistryNumber,
 		&i.MintrudRegistryEnteredAt,
+		&i.AssessmentResult,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -110,7 +113,7 @@ func (q *Queries) GetProtocolParticipantByID(ctx context.Context, id int64) (Pro
 const listAllProtocolParticipants = `-- name: ListAllProtocolParticipants :many
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE protocol_id = ?
 ORDER BY id ASC
@@ -134,6 +137,7 @@ func (q *Queries) ListAllProtocolParticipants(ctx context.Context, protocolID in
 			&i.RequiresMintrudTestConfirmedAt,
 			&i.MintrudRegistryNumber,
 			&i.MintrudRegistryEnteredAt,
+			&i.AssessmentResult,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -153,7 +157,7 @@ func (q *Queries) ListAllProtocolParticipants(ctx context.Context, protocolID in
 const listProtocolParticipants = `-- name: ListProtocolParticipants :many
 SELECT id, protocol_id, training_record_id, status,
        requires_mintrud_test_confirmed_at, mintrud_registry_number,
-       mintrud_registry_entered_at, created_at, updated_at
+       mintrud_registry_entered_at, assessment_result, created_at, updated_at
 FROM protocol_participants
 WHERE protocol_id = ? AND status = 'active'
 ORDER BY id ASC
@@ -177,6 +181,7 @@ func (q *Queries) ListProtocolParticipants(ctx context.Context, protocolID int64
 			&i.RequiresMintrudTestConfirmedAt,
 			&i.MintrudRegistryNumber,
 			&i.MintrudRegistryEnteredAt,
+			&i.AssessmentResult,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -199,7 +204,7 @@ SET status = 'removed', updated_at = ?
 WHERE id = ? AND status = 'active'
 RETURNING id, protocol_id, training_record_id, status,
           requires_mintrud_test_confirmed_at, mintrud_registry_number,
-          mintrud_registry_entered_at, created_at, updated_at
+          mintrud_registry_entered_at, assessment_result, created_at, updated_at
 `
 
 type MarkParticipantRemovedParams struct {
@@ -219,6 +224,7 @@ func (q *Queries) MarkParticipantRemoved(ctx context.Context, arg MarkParticipan
 		&i.RequiresMintrudTestConfirmedAt,
 		&i.MintrudRegistryNumber,
 		&i.MintrudRegistryEnteredAt,
+		&i.AssessmentResult,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

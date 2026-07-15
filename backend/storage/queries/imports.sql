@@ -1,15 +1,20 @@
 -- name: CreateImport :one
 INSERT INTO imports (
-  source_type,
+  profile,
   source_file_name,
   source_sha256,
+  source_size_bytes,
+  idempotency_key,
   uploaded_by_actor,
   received_at,
   status,
+  phase,
+  temp_file_token,
+  temp_file_expires_at,
   created_at,
   updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetImportByID :one
@@ -18,32 +23,116 @@ FROM imports
 WHERE id = ?
 LIMIT 1;
 
--- name: ListImports :many
+-- name: GetImportByIdempotencyKey :one
 SELECT *
 FROM imports
-ORDER BY received_at DESC, id DESC;
+WHERE idempotency_key = ?
+LIMIT 1;
 
--- name: UpdateImportStatus :exec
+-- name: FindExistingLegacyImportBySHA256 :one
+SELECT *
+FROM imports
+WHERE profile = 'legacy_registry'
+  AND source_sha256 = ?
+  AND status IN ('queued', 'processing', 'completed', 'completed_with_issues')
+ORDER BY id DESC
+LIMIT 1;
+
+-- name: ListImportsPage :many
+SELECT *
+FROM imports
+WHERE id < sqlc.arg(before_id) OR sqlc.arg(before_id) = 0
+ORDER BY id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: CountImportsAhead :one
+SELECT COUNT(*)
+FROM imports
+WHERE id < sqlc.arg(import_id)
+  AND status IN ('queued', 'processing');
+
+-- name: ClaimNextImport :one
+UPDATE imports
+SET status = 'processing',
+    phase = COALESCE(phase, 'parsing'),
+    lease_owner = sqlc.arg(lease_owner),
+    lease_expires_at = sqlc.arg(lease_expires_at),
+    heartbeat_at = sqlc.arg(now),
+    attempt = attempt + 1,
+    started_at = COALESCE(started_at, sqlc.arg(now)),
+    updated_at = sqlc.arg(now)
+WHERE id = (
+  SELECT id
+  FROM imports AS candidate
+  WHERE (
+      candidate.status = 'queued'
+      OR (
+        candidate.status = 'processing'
+        AND (
+          candidate.lease_expires_at IS NULL
+          OR candidate.lease_expires_at < sqlc.arg(now)
+        )
+      )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM imports AS active
+      WHERE active.status = 'processing'
+        AND active.lease_expires_at >= ?3
+    )
+  ORDER BY id ASC
+  LIMIT 1
+)
+RETURNING *;
+
+-- name: UpdateImportProgress :one
+UPDATE imports
+SET rows_total = ?,
+    rows_processed = ?,
+    rows_applied = ?,
+    rows_duplicate = ?,
+    rows_needs_review = ?,
+    heartbeat_at = ?,
+    lease_expires_at = ?,
+    updated_at = ?
+WHERE id = ? AND lease_owner = ?
+RETURNING *;
+
+-- name: UpdateImportState :one
 UPDATE imports
 SET status = ?,
+    phase = ?,
+    error_code = ?,
+    error_detail = ?,
+    staged_at = ?,
+    completed_at = ?,
+    lease_owner = ?,
+    lease_expires_at = ?,
     updated_at = ?
-WHERE id = ?;
+WHERE id = ?
+RETURNING *;
 
 -- name: CreateImportRow :one
 INSERT INTO import_rows (
   import_id,
+  sheet_name,
   row_number,
   raw_data,
   created_at
 )
-VALUES (?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: ListImportRows :many
-SELECT *
+SELECT import_rows.*
 FROM import_rows
-WHERE import_id = ?
-ORDER BY row_number ASC, id ASC;
+LEFT JOIN import_sheets
+  ON import_sheets.import_id = import_rows.import_id
+ AND import_sheets.sheet_name = import_rows.sheet_name
+WHERE import_rows.import_id = ?
+ORDER BY COALESCE(import_sheets.sheet_order, 0) ASC,
+         import_rows.row_number ASC,
+         import_rows.id ASC;
 
 -- name: GetImportRowByID :one
 SELECT *
