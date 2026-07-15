@@ -11,8 +11,8 @@ Run all Compose commands from this directory:
 ```bash
 cd infra
 cp .env.example .env
-# Set MINTRUD_ADMIN_BOOTSTRAP_PASSWORD in .env.
-# Keep MINTRUD_ADMIN_PLAINTEXT_CSRF=true for local plain HTTP.
+# Set IKC_SERVER_BOOTSTRAP_PASSWORD in .env.
+# Keep IKC_SERVER_PLAINTEXT_CSRF=true for local plain HTTP.
 DOCKER_BUILDKIT=1 docker compose up --build -d
 ```
 
@@ -28,7 +28,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8081/login
 docker compose down
 ```
 
-`docker compose down` stops the application and keeps the `mintrud_data`
+`docker compose down` stops the application and keeps the `ikc_data`
 SQLite volume. Use `docker compose down -v` only when the local database must
 be erased.
 

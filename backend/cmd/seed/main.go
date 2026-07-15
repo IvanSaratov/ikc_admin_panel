@@ -1,10 +1,10 @@
-// cmd/seed populates the Mintrud Admin SQLite database with a small,
+// cmd/seed populates the IKC Expert SQLite database with a small,
 // fully synthetic Russian-language fixture set designed to exercise every UI
 // surface the Core MVP ships: directory browse + filter, request
 // lifecycle (pending → applied), protocol lifecycle (draft → completed),
 // and the audit log.
 //
-// Usage: go run ./cmd/seed /absolute/path/to/mintrud-admin.db
+// Usage: go run ./cmd/seed /absolute/path/to/ikc.db
 //
 // The script is idempotent only in the trivial sense that running it
 // twice will fail on UNIQUE indexes — by design. It is meant to be run
@@ -38,9 +38,9 @@ var seedLog = zap.NewNop().Sugar()
 
 func main() {
 	logger, err := logging.New(logging.Config{
-		Env:    os.Getenv("MINTRUD_ADMIN_ENV"),
-		Level:  os.Getenv("MINTRUD_ADMIN_LOG_LEVEL"),
-		Format: os.Getenv("MINTRUD_ADMIN_LOG_FORMAT"),
+		Env:    os.Getenv("IKC_SEED_ENV"),
+		Level:  os.Getenv("IKC_SEED_LOG_LEVEL"),
+		Format: os.Getenv("IKC_SEED_LOG_FORMAT"),
 		Output: os.Stdout,
 	})
 	if err != nil {

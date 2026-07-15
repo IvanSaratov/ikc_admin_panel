@@ -25,7 +25,7 @@ type auditRecorder interface {
 // until the next token is available.
 //
 // State is process-local: counters reset on restart. For a single-host
-// internal admin panel this is acceptable; if Mintrud Admin ever grows
+// internal admin panel this is acceptable; if IKC Expert ever grows
 // to multiple replicas, swap this for a shared store (SQLite row or
 // Redis) — the Allow/retryAfter surface is what callers depend on.
 type RateLimiter struct {
@@ -118,8 +118,8 @@ func (r *RateLimiter) Reset() {
 // Retry-After header and a response shaped for the route, and audits the
 // rejection so operators can alert on bursts.
 //
-// IP extraction uses r.RemoteAddr with the port stripped. The Mintrud
-// Admin MVP runs behind a single reverse proxy in production; if the
+// IP extraction uses r.RemoteAddr with the port stripped. IKC Expert
+// runs behind a single reverse proxy in production; if the
 // proxy strips X-Forwarded-For, add it as a secondary signal here.
 func LoginRateLimitMiddleware(rl *RateLimiter, log *zap.Logger, auditSvc auditRecorder) func(http.Handler) http.Handler {
 	if log == nil {

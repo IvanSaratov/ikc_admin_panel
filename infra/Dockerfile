@@ -42,8 +42,8 @@ RUN sqlc generate \
     && CGO_ENABLED=0 GOOS=linux go build \
         -ldflags="-s -w" \
         -trimpath \
-        -o /out/mintrud-admin \
-        ./cmd/mintrud-admin
+        -o /out/server \
+        ./cmd/server
 
 # --- Runtime ---------------------------------------------------------------
 # alpine carries busybox + wget (used for HEALTHCHECK) and a normal user
@@ -59,19 +59,19 @@ FROM alpine:3.20 AS runtime
 # killing mid-handler. The Go binary handles SIGTERM itself, so
 # tini's job is mostly signal-forwarding + zombie reaping.
 RUN apk add --no-cache ca-certificates tini \
-    && addgroup -S mintrud && adduser -S -G mintrud mintrud
+    && addgroup -S ikc && adduser -S -G ikc ikc
 
 WORKDIR /app
 
-# SQLite lives at /app/data/mintrud-admin.db. The named volume mounts
+# SQLite lives at /app/data/ikc.db. The named volume mounts
 # /app/data, so the file persists across `docker compose down` /
 # `up` cycles. /app itself is owned by root; the data subdirectory
-# is created writable by mintrud:mintrud at startup (mkdir -m 0755).
-COPY --from=builder --chown=mintrud:mintrud /out/mintrud-admin /app/mintrud-admin
-COPY --from=frontend-builder --chown=mintrud:mintrud /src/frontend/dist /app/frontend/dist
-RUN mkdir -p /app/data && chown -R mintrud:mintrud /app
+# is created writable by ikc:ikc at startup (mkdir -m 0755).
+COPY --from=builder --chown=ikc:ikc /out/server /app/server
+COPY --from=frontend-builder --chown=ikc:ikc /src/frontend/dist /app/frontend/dist
+RUN mkdir -p /app/data && chown -R ikc:ikc /app
 
-USER mintrud:mintrud
+USER ikc:ikc
 
 # Listen on 8080 (default for the app). Exposed for documentation and
 # for compose's port mapping; infra/compose.yaml still publishes it
@@ -85,4 +85,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q --spider http://127.0.0.1:8080/login || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--", "/app/mintrud-admin"]
+ENTRYPOINT ["/sbin/tini", "--", "/app/server", "serve"]

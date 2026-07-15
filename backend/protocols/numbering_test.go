@@ -365,7 +365,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 
 	ctx := context.Background()
-	database, err := storage.Open(ctx, filepath.Join(t.TempDir(), "mintrud-test.db"))
+	database, err := storage.Open(ctx, filepath.Join(t.TempDir(), "ikc-test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

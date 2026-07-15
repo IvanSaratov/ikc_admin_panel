@@ -278,7 +278,7 @@ func newQueries(t *testing.T) *queriesWithDB {
 	t.Helper()
 
 	ctx := context.Background()
-	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "mintrud-test.db"))
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "ikc-test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

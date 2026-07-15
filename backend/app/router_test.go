@@ -261,7 +261,7 @@ func newTestRouterWithDBAndLog(t *testing.T, logger *zap.Logger) (http.Handler, 
 	return newTestRouterWithFrontend(t, logger, app.FrontendConfig{
 		Mode: app.FrontendEmbedded,
 		Assets: fstest.MapFS{
-			"index.html":    {Data: []byte(`<!doctype html><html><head><title>IKC Expert Mintrud Admin</title><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>`)},
+			"index.html":    {Data: []byte(`<!doctype html><html><head><title>IKC Expert</title><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>`)},
 			"assets/app.js": {Data: []byte(`console.log("spa test entrypoint");`)},
 		},
 	})
@@ -287,7 +287,7 @@ func newTestRouterWithFrontendAndLoginRate(t *testing.T, logger *zap.Logger, fro
 	t.Helper()
 
 	ctx := context.Background()
-	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "mintrud-test.db"))
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "ikc-test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

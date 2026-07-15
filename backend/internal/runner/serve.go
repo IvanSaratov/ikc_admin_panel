@@ -45,7 +45,7 @@ func runServe(parent context.Context, resolved ResolvedServeConfig, logger *zap.
 	defer stop()
 
 	logger.Info(
-		"Mintrud Admin starting",
+		"IKC Server starting",
 		zap.String("addr_config", "IKC_SERVER_ADDR"),
 		zap.String("db_config", "IKC_SERVER_DB"),
 	)
@@ -115,7 +115,7 @@ func runServe(parent context.Context, resolved ResolvedServeConfig, logger *zap.
 		}
 		serverErr := make(chan error, 1)
 		go func() {
-			logger.Info("Mintrud Admin listening", zap.String("addr_config", "IKC_SERVER_ADDR"))
+			logger.Info("IKC Server listening", zap.String("addr_config", "IKC_SERVER_ADDR"))
 			serverErr <- server.ListenAndServe()
 		}()
 

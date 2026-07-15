@@ -159,7 +159,7 @@ func TestRunServeRejectsTooNewSchemaBeforeStartingHTTP(t *testing.T) {
 	if !errors.Is(err, storage.ErrSchemaTooNew) {
 		t.Fatalf("runServe error = %v, want ErrSchemaTooNew", err)
 	}
-	if observed.FilterMessage("Mintrud Admin listening").Len() != 0 {
+	if observed.FilterMessage("IKC Server listening").Len() != 0 {
 		t.Fatal("too-new startup reached HTTP listening stage")
 	}
 	assertCommandDatabaseJournalMode(t, ctx, dbPath, "delete")
@@ -187,7 +187,7 @@ func TestRunServeHoldsOwnerLockUntilShutdown(t *testing.T) {
 	deadline := time.NewTimer(5 * time.Second)
 	defer deadline.Stop()
 	lockObserved := false
-	for !lockObserved || observed.FilterMessage("Mintrud Admin listening").Len() == 0 {
+	for !lockObserved || observed.FilterMessage("IKC Server listening").Len() == 0 {
 		if !lockObserved {
 			probe, err := storage.AcquireOwnerLock(dbPath)
 			switch {
@@ -272,7 +272,7 @@ func TestRunServeLogsChecksPassedForCurrentSchema(t *testing.T) {
 
 	deadline := time.NewTimer(5 * time.Second)
 	defer deadline.Stop()
-	for observed.FilterMessage("Mintrud Admin listening").Len() == 0 {
+	for observed.FilterMessage("IKC Server listening").Len() == 0 {
 		select {
 		case err := <-result:
 			t.Fatalf("runServe returned before listening: %v", err)

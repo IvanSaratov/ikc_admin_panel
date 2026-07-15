@@ -20,13 +20,14 @@ const BootstrapAdminLogin = "admin"
 const BootstrapAdminRole = "admin"
 
 // ErrBootstrapPasswordMissing is returned by EnsureBootstrapAdmin when the
-// DB has no admin user AND the env var MINTRUD_ADMIN_BOOTSTRAP_PASSWORD
+// DB has no admin user AND the IKC_SERVER_BOOTSTRAP_PASSWORD setting
 // is empty. We refuse to start rather than autogenerate or default —
 // auto-generated passwords get logged, lost, and reused; defaults are a
 // security hole. The operator must explicitly set the env var.
 var ErrBootstrapPasswordMissing = errors.New(
-	"no admin user exists in DB and MINTRUD_ADMIN_BOOTSTRAP_PASSWORD env is not set; " +
-		"refusing to start. Set the env to a strong password to bootstrap the initial admin account.",
+	"no admin user exists in DB and no bootstrap password is configured; " +
+		"refusing to start. Set IKC_SERVER_BOOTSTRAP_PASSWORD or pass the visible " +
+		"--bootstrap-password flag with a strong password to bootstrap the initial admin account.",
 )
 
 // EnsureBootstrapAdmin guarantees the database has an 'admin' user.

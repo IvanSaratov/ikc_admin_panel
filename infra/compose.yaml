@@ -1,14 +1,14 @@
-# compose.yaml — local developer stack for the Mintrud Admin
+# compose.yaml — local developer stack for IKC Server
 # monolith. SQLite is embedded, so there is no separate database
 # container; persistence is provided by a named volume mounted at
 # /app/data inside the container.
 #
 # Quick start:
-#   cp .env.example .env       # then edit MINTRUD_ADMIN_BOOTSTRAP_PASSWORD
+#   cp .env.example .env       # then edit IKC_SERVER_BOOTSTRAP_PASSWORD
 #   docker compose up --build
 #   open http://localhost:8081/login
 
-name: mintrud-admin
+name: ikc-server
 
 services:
   app:
@@ -22,7 +22,7 @@ services:
       # infrastructure under infra/.
       context: ..
       dockerfile: infra/Dockerfile
-    image: mintrud-admin:local
+    image: ikc-server:local
 
     # The app listens on :8080 by default. The host port (left) may
     # need to change if 8080 is already taken on the host (common
@@ -31,8 +31,8 @@ services:
     ports:
       - "8081:8080"
 
-    # Pull all MINTRUD_ADMIN_* vars from a host-side .env file. The
-    # file is gitignored; .env.example ships the template. MINTRUD_ADMIN_BOOTSTRAP_PASSWORD
+    # Pull all IKC_SERVER_* vars from a host-side .env file. The
+    # file is gitignored; .env.example ships the template. IKC_SERVER_BOOTSTRAP_PASSWORD
     # is REQUIRED on first start — the app refuses to boot without it
     # (see admin.EnsureBootstrapAdmin + ErrBootstrapPasswordMissing).
     env_file:
@@ -43,7 +43,7 @@ services:
     # directory. data/ is also created on first run by the binary
     # itself (mkdir -m 0755), so the volume can start empty.
     volumes:
-      - mintrud_data:/app/data
+      - ikc_data:/app/data
 
     # Restart policy: unless-stopped keeps the service up across
     # Docker daemon restarts but still allows `docker compose down` to
@@ -84,4 +84,4 @@ services:
 volumes:
   # The named volume is created on first `up` and persists across
   # `docker compose down`. To wipe data: `docker compose down -v`.
-  mintrud_data:
+  ikc_data:

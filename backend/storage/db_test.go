@@ -14,7 +14,7 @@ func TestOpenAndMigrateConfiguresSQLiteConnection(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "mintrud-test.db")
+	dbPath := filepath.Join(t.TempDir(), "ikc-test.db")
 
 	db, err := storage.Open(ctx, dbPath)
 	if err != nil {
@@ -47,7 +47,7 @@ func TestConstraintErrorMappingDetectsUniqueViolation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "mintrud-test.db")
+	dbPath := filepath.Join(t.TempDir(), "ikc-test.db")
 
 	db, err := storage.Open(ctx, dbPath)
 	if err != nil {
