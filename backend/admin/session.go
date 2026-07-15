@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -30,10 +31,9 @@ const EnvAppEnv = "MINTRUD_ADMIN_ENV"
 // DefaultSessionTTL is used when EnvSessionTTL is unset.
 const DefaultSessionTTL = 8 * time.Hour
 
-// SessionConfig is the fully-resolved set of session parameters,
-// built once at boot from environment variables. main() passes this
-// struct to NewSessionManager so session.go itself contains no
-// hardcoded values that an operator might want to override.
+// SessionConfig is the fully-resolved set of session parameters passed to
+// NewSessionManager. NewSessionConfig validates explicit runtime values;
+// LoadSessionConfig remains as a temporary adapter for the legacy entrypoint.
 type SessionConfig struct {
 	// TTL controls the absolute lifetime of a session (cookie Max-Age).
 	TTL time.Duration
@@ -53,43 +53,47 @@ type SessionConfig struct {
 // Errors are returned (not logged) so main() can surface them with full
 // context. The function never falls back silently on a malformed value.
 func LoadSessionConfig() (SessionConfig, error) {
-	cfg := SessionConfig{
-		TTL:      DefaultSessionTTL,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
-	}
+	ttl := DefaultSessionTTL
+	sameSite := "lax"
+	secure := false
 
 	if raw := os.Getenv(EnvSessionTTL); raw != "" {
 		d, err := time.ParseDuration(raw)
 		if err != nil {
 			return SessionConfig{}, fmt.Errorf("%s=%q: %w", EnvSessionTTL, raw, err)
 		}
-		if d <= 0 {
-			return SessionConfig{}, fmt.Errorf("%s must be > 0, got %q", EnvSessionTTL, raw)
-		}
-		cfg.TTL = d
+		ttl = d
 	}
 
 	if raw := os.Getenv(EnvCookieSameSite); raw != "" {
-		ss, err := parseSameSite(raw)
-		if err != nil {
-			return SessionConfig{}, err
-		}
-		cfg.SameSite = ss
+		sameSite = raw
 	}
 
 	switch {
 	case os.Getenv(EnvCookieSecure) != "":
-		secure, err := strconv.ParseBool(os.Getenv(EnvCookieSecure))
+		resolvedSecure, err := strconv.ParseBool(os.Getenv(EnvCookieSecure))
 		if err != nil {
 			return SessionConfig{}, fmt.Errorf("%s=%q: %w", EnvCookieSecure, os.Getenv(EnvCookieSecure), err)
 		}
-		cfg.Secure = secure
+		secure = resolvedSecure
 	default:
-		cfg.Secure = os.Getenv(EnvAppEnv) == "prod"
+		secure = os.Getenv(EnvAppEnv) == "prod"
 	}
 
-	return cfg, nil
+	return NewSessionConfig(ttl, sameSite, secure)
+}
+
+// NewSessionConfig validates explicit session settings and resolves the
+// SameSite string into the net/http representation used by scs.
+func NewSessionConfig(ttl time.Duration, sameSite string, secure bool) (SessionConfig, error) {
+	if ttl <= 0 {
+		return SessionConfig{}, fmt.Errorf("session TTL must be > 0, got %s", ttl)
+	}
+	resolvedSameSite, err := parseSameSite(strings.ToLower(strings.TrimSpace(sameSite)))
+	if err != nil {
+		return SessionConfig{}, err
+	}
+	return SessionConfig{TTL: ttl, SameSite: resolvedSameSite, Secure: secure}, nil
 }
 
 func parseSameSite(raw string) (http.SameSite, error) {
@@ -112,7 +116,7 @@ func NewSessionManager(cfg SessionConfig) *scs.SessionManager {
 	sm := scs.New()
 	sm.Lifetime = cfg.TTL
 	sm.IdleTimeout = cfg.TTL
-	sm.Cookie.Name = "mintrud_admin_session"
+	sm.Cookie.Name = "ikc_session"
 	sm.Cookie.HttpOnly = true
 	sm.Cookie.SameSite = cfg.SameSite
 	sm.Cookie.Secure = cfg.Secure

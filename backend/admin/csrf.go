@@ -57,6 +57,13 @@ const csrfFieldName = "csrf_token"
 // non-form clients (JSON APIs, fetch()). Mirrors gorilla/csrf default.
 const csrfRequestHeader = "X-CSRF-Token"
 
+// CSRFConfig is the explicit set of values required to build CSRF middleware.
+type CSRFConfig struct {
+	Key            string
+	TrustedOrigins []string
+	Plaintext      bool
+}
+
 // LoadCSRF сохраняет прежний публичный контракт и использует стандартный logger.
 func LoadCSRF() (func(http.Handler) http.Handler, error) {
 	return LoadCSRFWithLogger(zap.L())
@@ -65,46 +72,44 @@ func LoadCSRF() (func(http.Handler) http.Handler, error) {
 // LoadCSRFWithLogger собирает CSRF middleware из env-настроек и пишет
 // предупреждения через переданный runtime logger без значений секретов.
 func LoadCSRFWithLogger(log *zap.Logger) (func(http.Handler) http.Handler, error) {
+	return NewCSRFMiddleware(CSRFConfig{
+		Key:            os.Getenv(EnvCSRFKey),
+		TrustedOrigins: splitCSV(os.Getenv(EnvTrustedOrigins)),
+		Plaintext:      truthy(os.Getenv(EnvPlaintextCSRF)),
+	}, log)
+}
+
+// NewCSRFMiddleware builds CSRF middleware exclusively from explicit config.
+func NewCSRFMiddleware(config CSRFConfig, log *zap.Logger) (func(http.Handler) http.Handler, error) {
 	if log == nil {
 		log = zap.NewNop()
 	}
-
-	key, err := resolveCSRFKeyWithLogger(log)
+	key, err := resolveCSRFKey(config.Key, log)
 	if err != nil {
 		return nil, err
 	}
 
 	opts := []csrf.Option{
-		csrf.Secure(false), // dev: allow HTTP. prod must terminate TLS in front.
+		csrf.Secure(false),
 		csrf.HttpOnly(true),
 		csrf.FieldName(csrfFieldName),
 		csrf.RequestHeader(csrfRequestHeader),
 		csrf.CookieName(csrfCookieName),
 		csrf.Path("/"),
 	}
-	if origins := splitCSV(os.Getenv(EnvTrustedOrigins)); len(origins) > 0 {
-		opts = append(opts, csrf.TrustedOrigins(origins))
+	if len(config.TrustedOrigins) > 0 {
+		opts = append(opts, csrf.TrustedOrigins(config.TrustedOrigins))
 	}
-
-	mw := csrf.Protect(key, opts...)
-
-	// HTTP deployments: gorilla/csrf v1.7+ rejects HTTP Referer headers
-	// as a downgrade attack unless PlaintextHTTPContextKey is set on
-	// the request. csrf.PlaintextHTTPRequest is the documented way to
-	// mark a request as plaintext; wrapping it as a middleware applies
-	// the marker to every request. Only enable via the explicit env
-	// flag — see EnvPlaintextCSRF for why this is dev-only.
-	if truthy(os.Getenv(EnvPlaintextCSRF)) {
-		return func(next http.Handler) http.Handler {
-			protected := mw(next)
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				r = csrf.PlaintextHTTPRequest(r)
-				protected.ServeHTTP(w, r)
-			})
-		}, nil
+	protected := csrf.Protect(key, opts...)
+	if !config.Plaintext {
+		return protected, nil
 	}
-
-	return mw, nil
+	return func(next http.Handler) http.Handler {
+		wrapped := protected(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			wrapped.ServeHTTP(w, csrf.PlaintextHTTPRequest(r))
+		})
+	}, nil
 }
 
 // truthy reports whether s looks like an enabled boolean. Recognised
@@ -136,15 +141,11 @@ func splitCSV(s string) []string {
 	return out
 }
 
-func resolveCSRFKey() ([]byte, error) {
-	return resolveCSRFKeyWithLogger(zap.L())
-}
-
-func resolveCSRFKeyWithLogger(log *zap.Logger) ([]byte, error) {
+func resolveCSRFKey(raw string, log *zap.Logger) ([]byte, error) {
 	if log == nil {
 		log = zap.NewNop()
 	}
-	if raw := os.Getenv(EnvCSRFKey); raw != "" {
+	if raw != "" {
 		// Prefer hex decoding; fall back to raw bytes if not valid hex.
 		if decoded, err := hex.DecodeString(raw); err == nil {
 			if len(decoded) != csrfKeyLength {
@@ -165,10 +166,7 @@ func resolveCSRFKeyWithLogger(log *zap.Logger) ([]byte, error) {
 	if _, err := rand.Read(buf); err != nil {
 		return nil, fmt.Errorf("generate csrf key: %w", err)
 	}
-	log.Warn(
-		"MINTRUD_ADMIN_CSRF_KEY is unset; generated an ephemeral per-process CSRF key. " +
-			"Tokens will be invalidated on every restart. Set MINTRUD_ADMIN_CSRF_KEY to a stable 32-byte hex value.",
-	)
+	log.Warn("IKC_SERVER_CSRF_KEY is unset; generated an ephemeral per-process CSRF key")
 	return buf, nil
 }
 

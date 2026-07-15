@@ -8,11 +8,50 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/csrf"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+func TestNewSessionConfigValidatesAndResolvesValues(t *testing.T) {
+	cfg, err := NewSessionConfig(12*time.Hour, "strict", true)
+	if err != nil {
+		t.Fatalf("NewSessionConfig: %v", err)
+	}
+	if cfg.TTL != 12*time.Hour || cfg.SameSite != http.SameSiteStrictMode || !cfg.Secure {
+		t.Fatalf("config = %#v", cfg)
+	}
+	if _, err := NewSessionConfig(0, "lax", false); err == nil {
+		t.Fatal("zero TTL accepted")
+	}
+	if _, err := NewSessionConfig(time.Hour, "invalid", false); err == nil {
+		t.Fatal("invalid SameSite accepted")
+	}
+}
+
+func TestNewCSRFMiddlewareUsesExplicitConfig(t *testing.T) {
+	middleware, err := NewCSRFMiddleware(CSRFConfig{
+		Key:            strings.Repeat("ab", 32),
+		TrustedOrigins: []string{"localhost:8081"},
+		Plaintext:      true,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("NewCSRFMiddleware: %v", err)
+	}
+	if middleware == nil {
+		t.Fatal("nil middleware")
+	}
+}
+
+func TestNewCSRFMiddlewareDoesNotReadLegacyEnvironment(t *testing.T) {
+	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "invalid-environment-value")
+	_, err := NewCSRFMiddleware(CSRFConfig{Key: strings.Repeat("ab", 32)}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("explicit config was overridden by environment: %v", err)
+	}
+}
 
 // TestPadOrTruncate locks the CSRF key-length normaliser: input of the
 // target length is returned as-is, too-short input is right-padded with
@@ -51,9 +90,8 @@ func TestPadOrTruncate(t *testing.T) {
 func TestResolveCSRFKey_ValidHex(t *testing.T) {
 
 	hex64 := strings.Repeat("ab", 32) // 64 hex chars
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", hex64)
 
-	key, err := resolveCSRFKey()
+	key, err := resolveCSRFKey(hex64, zap.NewNop())
 	if err != nil {
 		t.Fatalf("resolveCSRFKey: %v", err)
 	}
@@ -74,9 +112,7 @@ func TestResolveCSRFKey_ValidHex(t *testing.T) {
 // canonical 32-byte key length. This is by design so operators can pass
 // a short human-readable passphrase without converting it to hex.
 func TestResolveCSRFKey_InvalidHex(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "not-actually-hex-zzz")
-
-	key, err := resolveCSRFKey()
+	key, err := resolveCSRFKey("not-actually-hex-zzz", zap.NewNop())
 	if err != nil {
 		t.Fatalf("resolveCSRFKey raw fallback: %v", err)
 	}
@@ -86,12 +122,10 @@ func TestResolveCSRFKey_InvalidHex(t *testing.T) {
 }
 
 // TestResolveCSRFKey_GeneratesEphemeral verifies the fallback path: when
-// the env var is unset, resolveCSRFKey returns a 32-byte random key
+// the explicit key is empty, resolveCSRFKey returns a 32-byte random key
 // (still meeting the gorilla/csrf length contract).
 func TestResolveCSRFKey_GeneratesEphemeral(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
-
-	key, err := resolveCSRFKey()
+	key, err := resolveCSRFKey("", zap.NewNop())
 	if err != nil {
 		t.Fatalf("resolveCSRFKey fallback: %v", err)
 	}
@@ -127,9 +161,7 @@ func TestLoadCSRF_ReturnsMiddleware(t *testing.T) {
 	}
 }
 
-func TestLoadCSRFWithLogger_UsesProvidedLogger(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
-
+func TestNewCSRFMiddlewareUsesProvidedLogger(t *testing.T) {
 	var out bytes.Buffer
 	logger := zap.New(zapcore.NewCore(
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
@@ -137,12 +169,12 @@ func TestLoadCSRFWithLogger_UsesProvidedLogger(t *testing.T) {
 		zapcore.InfoLevel,
 	))
 
-	if _, err := LoadCSRFWithLogger(logger); err != nil {
-		t.Fatalf("LoadCSRFWithLogger: %v", err)
+	if _, err := NewCSRFMiddleware(CSRFConfig{}, logger); err != nil {
+		t.Fatalf("NewCSRFMiddleware: %v", err)
 	}
 
 	logOutput := out.String()
-	if !strings.Contains(logOutput, "MINTRUD_ADMIN_CSRF_KEY is unset") {
+	if !strings.Contains(logOutput, "IKC_SERVER_CSRF_KEY is unset") {
 		t.Fatalf("log output missing csrf warning: %s", logOutput)
 	}
 	if strings.Contains(logOutput, "csrf_token") {
@@ -193,6 +225,22 @@ func TestLoadSessionConfig(t *testing.T) {
 	}
 	if cfg.SameSite != http.SameSiteLaxMode {
 		t.Errorf("SameSite default = %d, want SameSiteLaxMode", cfg.SameSite)
+	}
+
+	t.Setenv(EnvCookieSecure, "true")
+	cfg, err = LoadSessionConfig()
+	if err != nil {
+		t.Fatalf("LoadSessionConfig explicit secure cookie: %v", err)
+	}
+	if !cfg.Secure {
+		t.Error("Secure = false, want true for explicit secure-cookie setting")
+	}
+}
+
+func TestNewSessionManagerUsesCanonicalCookieName(t *testing.T) {
+	sm := NewSessionManager(SessionConfig{TTL: time.Hour})
+	if sm.Cookie.Name != "ikc_session" {
+		t.Fatalf("cookie name = %q, want %q", sm.Cookie.Name, "ikc_session")
 	}
 }
 
@@ -247,19 +295,16 @@ func TestTruthy(t *testing.T) {
 	}
 }
 
-// TestLoadCSRF_PlaintextFlag проверяет, что локальный HTTP-режим не отключает
+// TestNewCSRFMiddleware_PlaintextFlag проверяет, что локальный HTTP-режим не отключает
 // проверку CSRF token. Plaintext mode должен только пометить request безопасным
 // для referer-проверок gorilla/csrf, а не обходить csrf.Protect.
-func TestLoadCSRF_PlaintextFlag(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
-	t.Setenv(EnvPlaintextCSRF, "true")
-
-	mw, err := LoadCSRF()
+func TestNewCSRFMiddleware_PlaintextFlag(t *testing.T) {
+	mw, err := NewCSRFMiddleware(CSRFConfig{Plaintext: true}, zap.NewNop())
 	if err != nil {
-		t.Fatalf("LoadCSRF: %v", err)
+		t.Fatalf("NewCSRFMiddleware: %v", err)
 	}
 	if mw == nil {
-		t.Fatal("LoadCSRF returned nil middleware")
+		t.Fatal("NewCSRFMiddleware returned nil middleware")
 	}
 
 	called := false
@@ -277,16 +322,16 @@ func TestLoadCSRF_PlaintextFlag(t *testing.T) {
 	}
 }
 
-// TestLoadCSRF_PlaintextFlag_AllowsValidHTTPReferer проверяет позитивный
+// TestNewCSRFMiddleware_PlaintextFlag_AllowsValidHTTPReferer проверяет позитивный
 // локальный HTTP flow: валидный token и HTTP Referer должны пройти, когда
-// MINTRUD_ADMIN_PLAINTEXT_CSRF явно включен.
-func TestLoadCSRF_PlaintextFlag_AllowsValidHTTPReferer(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", strings.Repeat("ab", 32))
-	t.Setenv(EnvPlaintextCSRF, "true")
-
-	mw, err := LoadCSRF()
+// plaintext mode явно включен.
+func TestNewCSRFMiddleware_PlaintextFlag_AllowsValidHTTPReferer(t *testing.T) {
+	mw, err := NewCSRFMiddleware(CSRFConfig{
+		Key:       strings.Repeat("ab", 32),
+		Plaintext: true,
+	}, zap.NewNop())
 	if err != nil {
-		t.Fatalf("LoadCSRF: %v", err)
+		t.Fatalf("NewCSRFMiddleware: %v", err)
 	}
 
 	postCalled := false
@@ -328,20 +373,18 @@ func TestLoadCSRF_PlaintextFlag_AllowsValidHTTPReferer(t *testing.T) {
 	}
 }
 
-// TestLoadCSRF_TrustedOrigins verifies the env var is wired into the
+// TestNewCSRFMiddleware_TrustedOrigins verifies explicit origins are wired into the
 // csrf.TrustedOrigins option when non-empty. The middleware still has
 // to run a real request to exercise the check end-to-end, but the
 // load path must succeed and return a non-nil middleware.
-func TestLoadCSRF_TrustedOrigins(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
-	t.Setenv(EnvPlaintextCSRF, "")
-	t.Setenv(EnvTrustedOrigins, "http://localhost:8081, http://example.com")
-
-	mw, err := LoadCSRF()
+func TestNewCSRFMiddleware_TrustedOrigins(t *testing.T) {
+	mw, err := NewCSRFMiddleware(CSRFConfig{
+		TrustedOrigins: []string{"http://localhost:8081", "http://example.com"},
+	}, zap.NewNop())
 	if err != nil {
-		t.Fatalf("LoadCSRF with TrustedOrigins: %v", err)
+		t.Fatalf("NewCSRFMiddleware with TrustedOrigins: %v", err)
 	}
 	if mw == nil {
-		t.Fatal("LoadCSRF returned nil middleware")
+		t.Fatal("NewCSRFMiddleware returned nil middleware")
 	}
 }
