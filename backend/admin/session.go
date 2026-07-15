@@ -1,39 +1,19 @@
 package admin
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
 )
 
-// EnvSessionTTL is the env var that overrides the session lifetime.
-// Value is parsed as a Go time.Duration (e.g. "8h", "30m", "24h").
-const EnvSessionTTL = "MINTRUD_ADMIN_SESSION_TTL"
-
-// EnvCookieSameSite is the env var that overrides the cookie SameSite
-// attribute. Allowed values: "lax" (default), "strict", "none".
-const EnvCookieSameSite = "MINTRUD_ADMIN_COOKIE_SAMESITE"
-
-// EnvCookieSecure is the env var that explicitly sets the cookie Secure
-// flag. When unset, Secure is derived from EnvAppEnv (true for "prod").
-const EnvCookieSecure = "MINTRUD_ADMIN_COOKIE_SECURE"
-
-// EnvAppEnv is the application environment indicator.
-// "prod" enables Secure cookies by default.
-const EnvAppEnv = "MINTRUD_ADMIN_ENV"
-
-// DefaultSessionTTL is used when EnvSessionTTL is unset.
+// DefaultSessionTTL is the default session lifetime used by the CLI.
 const DefaultSessionTTL = 8 * time.Hour
 
 // SessionConfig is the fully-resolved set of session parameters passed to
-// NewSessionManager. NewSessionConfig validates explicit runtime values;
-// LoadSessionConfig remains as a temporary adapter for the legacy entrypoint.
+// NewSessionManager. NewSessionConfig validates explicit runtime values.
 type SessionConfig struct {
 	// TTL controls the absolute lifetime of a session (cookie Max-Age).
 	TTL time.Duration
@@ -41,46 +21,6 @@ type SessionConfig struct {
 	SameSite http.SameSite
 	// Secure sets the cookie Secure flag.
 	Secure bool
-}
-
-// LoadSessionConfig reads SessionConfig from environment variables.
-//
-// Defaults (when env vars are unset):
-//   - TTL:        8h
-//   - SameSite:   http.SameSiteLaxMode
-//   - Secure:     true if MINTRUD_ADMIN_ENV=prod, else false
-//
-// Errors are returned (not logged) so main() can surface them with full
-// context. The function never falls back silently on a malformed value.
-func LoadSessionConfig() (SessionConfig, error) {
-	ttl := DefaultSessionTTL
-	sameSite := "lax"
-	secure := false
-
-	if raw := os.Getenv(EnvSessionTTL); raw != "" {
-		d, err := time.ParseDuration(raw)
-		if err != nil {
-			return SessionConfig{}, fmt.Errorf("%s=%q: %w", EnvSessionTTL, raw, err)
-		}
-		ttl = d
-	}
-
-	if raw := os.Getenv(EnvCookieSameSite); raw != "" {
-		sameSite = raw
-	}
-
-	switch {
-	case os.Getenv(EnvCookieSecure) != "":
-		resolvedSecure, err := strconv.ParseBool(os.Getenv(EnvCookieSecure))
-		if err != nil {
-			return SessionConfig{}, fmt.Errorf("%s=%q: %w", EnvCookieSecure, os.Getenv(EnvCookieSecure), err)
-		}
-		secure = resolvedSecure
-	default:
-		secure = os.Getenv(EnvAppEnv) == "prod"
-	}
-
-	return NewSessionConfig(ttl, sameSite, secure)
 }
 
 // NewSessionConfig validates explicit session settings and resolves the
@@ -105,7 +45,7 @@ func parseSameSite(raw string) (http.SameSite, error) {
 	case "none":
 		return http.SameSiteNoneMode, nil
 	default:
-		return 0, fmt.Errorf("%s must be one of lax|strict|none, got %q", EnvCookieSameSite, raw)
+		return 0, fmt.Errorf("cookie same-site must be one of lax|strict|none, got %q", raw)
 	}
 }
 
@@ -123,7 +63,3 @@ func NewSessionManager(cfg SessionConfig) *scs.SessionManager {
 	sm.Cookie.Path = "/"
 	return sm
 }
-
-// ErrSessionConfigInvalid is reserved for future use; current callers
-// receive a wrapped error directly from LoadSessionConfig.
-var ErrSessionConfigInvalid = errors.New("invalid session config")

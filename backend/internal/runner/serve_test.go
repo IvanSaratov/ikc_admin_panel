@@ -1,16 +1,19 @@
-package main
+package runner
 
 import (
 	"context"
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/app"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/storage"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -21,6 +24,58 @@ type shutdownTestServer struct {
 	closeErr    error
 	closed      bool
 	onClose     func()
+}
+
+func resolvedServeTestConfig(databasePath, bootstrapPassword string) ResolvedServeConfig {
+	return ResolvedServeConfig{
+		Address:           "127.0.0.1:0",
+		DatabasePath:      databasePath,
+		BootstrapPassword: bootstrapPassword,
+		Session: admin.SessionConfig{
+			TTL:      8 * time.Hour,
+			SameSite: http.SameSiteLaxMode,
+		},
+		CSRF: admin.CSRFConfig{Key: strings.Repeat("ab", 32)},
+		Frontend: app.FrontendConfig{
+			Mode: app.FrontendDisabled,
+		},
+	}
+}
+
+func TestFrontendAssetsDirPrefersRepositoryRootLayout(t *testing.T) {
+	root := t.TempDir()
+	distDir := filepath.Join(root, "frontend", "dist")
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("create frontend dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(distDir, "index.html"), nil, 0o644); err != nil {
+		t.Fatalf("create frontend index: %v", err)
+	}
+	t.Chdir(root)
+
+	if got := frontendAssetsDir(); got != filepath.Join("frontend", "dist") {
+		t.Errorf("frontendAssetsDir() = %q, want %q", got, filepath.Join("frontend", "dist"))
+	}
+}
+
+func TestFrontendAssetsDirFallsBackFromBackendModule(t *testing.T) {
+	root := t.TempDir()
+	backendDir := filepath.Join(root, "backend")
+	distDir := filepath.Join(root, "frontend", "dist")
+	if err := os.MkdirAll(backendDir, 0o755); err != nil {
+		t.Fatalf("create backend directory: %v", err)
+	}
+	if err := os.MkdirAll(distDir, 0o755); err != nil {
+		t.Fatalf("create frontend dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(distDir, "index.html"), nil, 0o644); err != nil {
+		t.Fatalf("create frontend index: %v", err)
+	}
+	t.Chdir(backendDir)
+
+	if got := frontendAssetsDir(); got != filepath.Join("..", "frontend", "dist") {
+		t.Errorf("frontendAssetsDir() = %q, want %q", got, filepath.Join("..", "frontend", "dist"))
+	}
 }
 
 func (server *shutdownTestServer) Shutdown(context.Context) error {
@@ -98,7 +153,7 @@ func TestRunServeRejectsTooNewSchemaBeforeStartingHTTP(t *testing.T) {
 	core, observed := observer.New(zap.InfoLevel)
 	err = runServe(
 		ctx,
-		runtimeConfig{Addr: "127.0.0.1:0", DBPath: dbPath},
+		resolvedServeTestConfig(dbPath, "synthetic-test-password"),
 		zap.New(core),
 	)
 	if !errors.Is(err, storage.ErrSchemaTooNew) {
@@ -117,8 +172,6 @@ func TestRunServeRejectsTooNewSchemaBeforeStartingHTTP(t *testing.T) {
 
 func TestRunServeHoldsOwnerLockUntilShutdown(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "serve.db")
-	t.Setenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD", "synthetic-test-password")
-	t.Setenv("MINTRUD_ADMIN_FRONTEND", "disabled")
 	ctx, cancel := context.WithCancel(context.Background())
 	core, observed := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
@@ -126,7 +179,7 @@ func TestRunServeHoldsOwnerLockUntilShutdown(t *testing.T) {
 	go func() {
 		result <- runServe(
 			ctx,
-			runtimeConfig{Addr: "127.0.0.1:0", DBPath: dbPath},
+			resolvedServeTestConfig(dbPath, "synthetic-test-password"),
 			logger,
 		)
 	}()
@@ -177,12 +230,10 @@ func TestRunServeHoldsOwnerLockUntilShutdown(t *testing.T) {
 
 func TestRunServeReleasesOwnerLockWhenBootstrapFails(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "missing-bootstrap.db")
-	t.Setenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD", "")
-	t.Setenv("MINTRUD_ADMIN_FRONTEND", "disabled")
 
 	err := runServe(
 		context.Background(),
-		runtimeConfig{Addr: "127.0.0.1:0", DBPath: dbPath},
+		resolvedServeTestConfig(dbPath, ""),
 		nil,
 	)
 	if !errors.Is(err, admin.ErrBootstrapPasswordMissing) {
@@ -200,11 +251,10 @@ func TestRunServeReleasesOwnerLockWhenBootstrapFails(t *testing.T) {
 
 func TestRunServeLogsChecksPassedForCurrentSchema(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "current.db")
-	t.Setenv("MINTRUD_ADMIN_ENV", "dev")
-	t.Setenv("MINTRUD_ADMIN_DB", dbPath)
-	t.Setenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD", "synthetic-test-password")
-	t.Setenv("MINTRUD_ADMIN_FRONTEND", "disabled")
-	if err := runCommand(context.Background(), []string{"db", "migrate"}, io.Discard, nil); err != nil {
+	if err := RunDatabase(context.Background(), DatabaseMigrate, DatabaseConfig{
+		Runtime:      testRuntimeConfig(),
+		DatabasePath: dbPath,
+	}, io.Discard); err != nil {
 		t.Fatalf("migrate current database: %v", err)
 	}
 
@@ -215,7 +265,7 @@ func TestRunServeLogsChecksPassedForCurrentSchema(t *testing.T) {
 	go func() {
 		result <- runServe(
 			ctx,
-			runtimeConfig{Addr: "127.0.0.1:0", DBPath: dbPath},
+			resolvedServeTestConfig(dbPath, "synthetic-test-password"),
 			zap.New(core),
 		)
 	}()

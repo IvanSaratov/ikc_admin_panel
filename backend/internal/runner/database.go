@@ -1,4 +1,4 @@
-package main
+package runner
 
 import (
 	"context"
@@ -39,8 +39,18 @@ func writeEmbeddedCatalogStatus(out io.Writer) error {
 	return writeMigrationStatus(out, catalog)
 }
 
-func runStatusCommand(ctx context.Context, config runtimeConfig, stdout io.Writer) error {
-	state, err := inspectDatabaseFile(config.DBPath)
+func RunDatabase(ctx context.Context, action DatabaseAction, config DatabaseConfig, stdout io.Writer) error {
+	resolved, err := ResolveDatabaseConfig(config)
+	if err != nil {
+		return err
+	}
+	return withLogger(config.Runtime, stdout, func(logger *zap.Logger) error {
+		return runDatabaseCommand(ctx, string(action), resolved.DatabasePath, stdout, logger)
+	})
+}
+
+func runStatusCommand(ctx context.Context, databasePath string, stdout io.Writer) error {
+	state, err := inspectDatabaseFile(databasePath)
 	if err != nil {
 		return err
 	}
@@ -48,7 +58,7 @@ func runStatusCommand(ctx context.Context, config runtimeConfig, stdout io.Write
 		return writeEmbeddedCatalogStatus(stdout)
 	}
 
-	db, err := storage.OpenReadOnly(ctx, config.DBPath)
+	db, err := storage.OpenReadOnly(ctx, databasePath)
 	if err != nil {
 		return err
 	}
@@ -327,7 +337,7 @@ func logDatabasePreparationFailure(
 func runDatabaseCommand(
 	ctx context.Context,
 	action string,
-	config runtimeConfig,
+	databasePath string,
 	stdout io.Writer,
 	logger *zap.Logger,
 ) error {
@@ -335,17 +345,17 @@ func runDatabaseCommand(
 		logger = zap.NewNop()
 	}
 	if action == "status" {
-		return runStatusCommand(ctx, config, stdout)
+		return runStatusCommand(ctx, databasePath, stdout)
 	}
 	if action != "migrate" && action != "verify" && action != "backup" {
-		return ErrUsage
+		return errors.New("unsupported database action")
 	}
 
 	policy := databaseMustExist
 	if action == "migrate" {
 		policy = databaseMayCreate
 	}
-	return withOwnedDatabase(ctx, config.DBPath, policy, func(db *sql.DB, ownedPath string) error {
+	return withOwnedDatabase(ctx, databasePath, policy, func(db *sql.DB, ownedPath string) error {
 		if action == "migrate" {
 			initializer, err := storage.NewEmbeddedInitializer(db, ownedPath)
 			if err != nil {
@@ -416,7 +426,7 @@ func runDatabaseCommand(
 			_, err = fmt.Fprintf(stdout, "backup=%s\n", path)
 			return err
 		default:
-			return ErrUsage
+			return errors.New("unsupported database action")
 		}
 	})
 }

@@ -134,33 +134,6 @@ func TestResolveCSRFKey_GeneratesEphemeral(t *testing.T) {
 	}
 }
 
-// TestLoadCSRF_ReturnsMiddleware locks the public surface: LoadCSRF must
-// always return a non-nil middleware (so main.go can plug it straight
-// into app.Deps.CSRF).
-func TestLoadCSRF_ReturnsMiddleware(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_CSRF_KEY", "")
-
-	mw, err := LoadCSRF()
-	if err != nil {
-		t.Fatalf("LoadCSRF: %v", err)
-	}
-	if mw == nil {
-		t.Fatal("LoadCSRF returned nil middleware")
-	}
-
-	// The middleware must be callable — wrap a trivial handler and call it.
-	called := false
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if !called {
-		t.Error("wrapped handler was not invoked")
-	}
-}
-
 func TestNewCSRFMiddlewareUsesProvidedLogger(t *testing.T) {
 	var out bytes.Buffer
 	logger := zap.New(zapcore.NewCore(
@@ -209,89 +182,10 @@ func TestParseSameSite(t *testing.T) {
 	}
 }
 
-// TestLoadSessionConfig verifies the env-driven config loader returns
-// sensible defaults and respects MINTRUD_ADMIN_SESSION_TTL.
-func TestLoadSessionConfig(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_SESSION_TTL", "")
-	t.Setenv("MINTRUD_ADMIN_COOKIE_SECURE", "")
-	t.Setenv("MINTRUD_ADMIN_COOKIE_SAMESITE", "")
-
-	cfg, err := LoadSessionConfig()
-	if err != nil {
-		t.Fatalf("LoadSessionConfig default: %v", err)
-	}
-	if cfg.TTL <= 0 {
-		t.Errorf("TTL = %v, want positive default", cfg.TTL)
-	}
-	if cfg.SameSite != http.SameSiteLaxMode {
-		t.Errorf("SameSite default = %d, want SameSiteLaxMode", cfg.SameSite)
-	}
-
-	t.Setenv(EnvCookieSecure, "true")
-	cfg, err = LoadSessionConfig()
-	if err != nil {
-		t.Fatalf("LoadSessionConfig explicit secure cookie: %v", err)
-	}
-	if !cfg.Secure {
-		t.Error("Secure = false, want true for explicit secure-cookie setting")
-	}
-}
-
 func TestNewSessionManagerUsesCanonicalCookieName(t *testing.T) {
 	sm := NewSessionManager(SessionConfig{TTL: time.Hour})
 	if sm.Cookie.Name != "ikc_session" {
 		t.Fatalf("cookie name = %q, want %q", sm.Cookie.Name, "ikc_session")
-	}
-}
-
-// TestSplitCSV locks the comma-separated env parser used for
-// MINTRUD_ADMIN_TRUSTED_ORIGINS (and any future list-valued env).
-// Empty string → nil (signals "unset"), whitespace around items is
-// trimmed, empty entries are dropped.
-func TestSplitCSV(t *testing.T) {
-	cases := []struct {
-		name string
-		in   string
-		want []string
-	}{
-		{"empty yields nil", "", nil},
-		{"single entry", "http://localhost:8081", []string{"http://localhost:8081"}},
-		{"multiple entries trimmed", " a , b ,c ", []string{"a", "b", "c"}},
-		{"drops empty segments", "a,,b, ,c", []string{"a", "b", "c"}},
-		{"trailing comma tolerated", "a,b,", []string{"a", "b"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := splitCSV(tc.in)
-			if len(got) != len(tc.want) {
-				t.Fatalf("splitCSV(%q) len = %d, want %d (%v)", tc.in, len(got), len(tc.want), got)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Errorf("splitCSV(%q)[%d] = %q, want %q", tc.in, i, got[i], tc.want[i])
-				}
-			}
-		})
-	}
-}
-
-// TestTruthy covers every recognised form plus a few that should be
-// rejected. Used by LoadCSRF to read MINTRUD_ADMIN_PLAINTEXT_CSRF.
-func TestTruthy(t *testing.T) {
-	cases := []struct {
-		in   string
-		want bool
-	}{
-		{"", false}, {"0", false}, {"false", false}, {"no", false},
-		{"off", false}, {"garbage", false},
-		{"1", true}, {"true", true}, {"True", true}, {"TRUE", true},
-		{"t", true}, {"yes", true}, {"y", true}, {"on", true},
-		{"  true  ", true}, // trimming
-	}
-	for _, tc := range cases {
-		if got := truthy(tc.in); got != tc.want {
-			t.Errorf("truthy(%q) = %v, want %v", tc.in, got, tc.want)
-		}
 	}
 }
 

@@ -1,10 +1,11 @@
-package main
+package runner
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,7 +27,17 @@ type shutdownCapableServer interface {
 	Close() error
 }
 
-func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) error {
+func Serve(ctx context.Context, config ServeConfig, stdout io.Writer) error {
+	resolved, err := ResolveServeConfig(config)
+	if err != nil {
+		return err
+	}
+	return withLogger(config.Runtime, stdout, func(logger *zap.Logger) error {
+		return runServe(ctx, resolved, logger)
+	})
+}
+
+func runServe(parent context.Context, resolved ResolvedServeConfig, logger *zap.Logger) error {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -35,11 +46,11 @@ func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) 
 
 	logger.Info(
 		"Mintrud Admin starting",
-		zap.String("addr_config", "MINTRUD_ADMIN_ADDR"),
-		zap.String("db_config", "MINTRUD_ADMIN_DB"),
+		zap.String("addr_config", "IKC_SERVER_ADDR"),
+		zap.String("db_config", "IKC_SERVER_DB"),
 	)
 
-	return withOwnedDatabase(ctx, config.DBPath, databaseMayCreate, func(database *sql.DB, ownedPath string) error {
+	return withOwnedDatabase(ctx, resolved.DatabasePath, databaseMayCreate, func(database *sql.DB, ownedPath string) error {
 		initializer, err := storage.NewEmbeddedInitializer(database, ownedPath)
 		if err != nil {
 			return err
@@ -79,32 +90,32 @@ func runServe(parent context.Context, config runtimeConfig, logger *zap.Logger) 
 			ctx,
 			admin.NewStore(queries),
 			queries,
-			os.Getenv("MINTRUD_ADMIN_BOOTSTRAP_PASSWORD"),
+			resolved.BootstrapPassword,
 		); err != nil {
 			return err
 		}
 		logger.Info("bootstrap admin ensured")
 
-		sessionConfig, err := admin.LoadSessionConfig()
+		csrfMiddleware, err := admin.NewCSRFMiddleware(resolved.CSRF, logger)
 		if err != nil {
 			return err
 		}
-		csrfMiddleware, err := admin.LoadCSRFWithLogger(logger)
-		if err != nil {
-			return err
+		frontend := resolved.Frontend
+		if frontend.Mode == app.FrontendEmbedded {
+			frontend.Assets = os.DirFS(frontendAssetsDir())
 		}
 		server, err := app.NewServer(app.ServerConfig{
-			Addr:     config.Addr,
-			Sessions: admin.NewSessionManager(sessionConfig),
+			Addr:     resolved.Address,
+			Sessions: admin.NewSessionManager(resolved.Session),
 			CSRF:     csrfMiddleware,
-			Frontend: frontendConfigFromEnv(),
+			Frontend: frontend,
 		}, database, logger)
 		if err != nil {
 			return err
 		}
 		serverErr := make(chan error, 1)
 		go func() {
-			logger.Info("Mintrud Admin listening", zap.String("addr_config", "MINTRUD_ADMIN_ADDR"))
+			logger.Info("Mintrud Admin listening", zap.String("addr_config", "IKC_SERVER_ADDR"))
 			serverErr <- server.ListenAndServe()
 		}()
 
@@ -148,18 +159,6 @@ func shutdownServer(server shutdownCapableServer, serverErr <-chan error, timeou
 		closeErr,
 		serveErr,
 	)
-}
-
-func frontendConfigFromEnv() app.FrontendConfig {
-	switch env("MINTRUD_ADMIN_FRONTEND", string(app.FrontendEmbedded)) {
-	case string(app.FrontendDisabled):
-		return app.FrontendConfig{Mode: app.FrontendDisabled}
-	default:
-		return app.FrontendConfig{
-			Mode:   app.FrontendEmbedded,
-			Assets: os.DirFS(frontendAssetsDir()),
-		}
-	}
 }
 
 func frontendAssetsDir() string {

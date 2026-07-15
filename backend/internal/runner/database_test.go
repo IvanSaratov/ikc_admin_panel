@@ -1,10 +1,11 @@
-package main
+package runner
 
 import (
 	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,17 +20,25 @@ import (
 
 func configureCommandDatabase(t *testing.T) string {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "commands.db")
-	t.Setenv("MINTRUD_ADMIN_ENV", "dev")
-	t.Setenv("MINTRUD_ADMIN_DB", dbPath)
-	return dbPath
+	return filepath.Join(t.TempDir(), "commands.db")
 }
 
-func TestRunCommandMigrateThenStatus(t *testing.T) {
+func testRuntimeConfig() RuntimeConfig {
+	return RuntimeConfig{Environment: "dev", LogLevel: "error"}
+}
+
+func runDatabaseTestCommand(ctx context.Context, action string, databasePath string, stdout io.Writer) error {
+	return RunDatabase(ctx, DatabaseAction(action), DatabaseConfig{
+		Runtime:      testRuntimeConfig(),
+		DatabasePath: databasePath,
+	}, stdout)
+}
+
+func TestRunDatabaseMigrateThenStatus(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
 	ctx := context.Background()
 	var migrateOut bytes.Buffer
-	if err := runCommand(ctx, []string{"db", "migrate"}, &migrateOut, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "migrate", dbPath, &migrateOut); err != nil {
 		t.Fatalf("db migrate: %v", err)
 	}
 	if !strings.Contains(migrateOut.String(), "current=1 target=1 pending=0") {
@@ -41,7 +50,7 @@ func TestRunCommandMigrateThenStatus(t *testing.T) {
 	assertCommandDatabaseJournalMode(t, ctx, dbPath, "wal")
 
 	var statusOut bytes.Buffer
-	if err := runCommand(ctx, []string{"db", "status"}, &statusOut, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "status", dbPath, &statusOut); err != nil {
 		t.Fatalf("db status: %v", err)
 	}
 	if !strings.Contains(statusOut.String(), "current=1 target=1 pending=0") {
@@ -49,7 +58,7 @@ func TestRunCommandMigrateThenStatus(t *testing.T) {
 	}
 }
 
-func TestRunCommandMigrateRejectsForeignSQLiteWithoutMutation(t *testing.T) {
+func TestRunDatabaseMigrateRejectsForeignSQLiteWithoutMutation(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
 	ctx := context.Background()
 	createUnconfiguredCommandSQLite(t, ctx, dbPath)
@@ -58,7 +67,7 @@ func TestRunCommandMigrateRejectsForeignSQLiteWithoutMutation(t *testing.T) {
 		t.Fatalf("read foreign database before migrate: %v", err)
 	}
 
-	err = runCommand(ctx, []string{"db", "migrate"}, &bytes.Buffer{}, nil)
+	err = runDatabaseTestCommand(ctx, "migrate", dbPath, &bytes.Buffer{})
 	if !errors.Is(err, storage.ErrUnrecognizedDatabase) {
 		t.Fatalf("db migrate error = %v, want ErrUnrecognizedDatabase", err)
 	}
@@ -90,7 +99,7 @@ func TestRunCommandMigrateRejectsForeignSQLiteWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestRunCommandExistingMaintenanceRejectsTooNewBeforeConfiguration(t *testing.T) {
+func TestRunDatabaseExistingMaintenanceRejectsTooNewBeforeConfiguration(t *testing.T) {
 	for _, action := range []string{"verify", "backup"} {
 		t.Run(action, func(t *testing.T) {
 			dbPath := configureCommandDatabase(t)
@@ -101,7 +110,7 @@ func TestRunCommandExistingMaintenanceRejectsTooNewBeforeConfiguration(t *testin
 				t.Fatalf("read too-new database before command: %v", err)
 			}
 
-			err = runCommand(ctx, []string{"db", action}, &bytes.Buffer{}, nil)
+			err = runDatabaseTestCommand(ctx, action, dbPath, &bytes.Buffer{})
 			if !errors.Is(err, storage.ErrSchemaTooNew) {
 				t.Fatalf("db %s error = %v, want ErrSchemaTooNew", action, err)
 			}
@@ -135,7 +144,7 @@ func TestRunCommandExistingMaintenanceRejectsTooNewBeforeConfiguration(t *testin
 	}
 }
 
-func TestRunCommandExistingMaintenanceRejectsGooseBootstrapBeforeConfiguration(t *testing.T) {
+func TestRunDatabaseExistingMaintenanceRejectsGooseBootstrapBeforeConfiguration(t *testing.T) {
 	for _, action := range []string{"verify", "backup"} {
 		t.Run(action, func(t *testing.T) {
 			dbPath := configureCommandDatabase(t)
@@ -146,7 +155,7 @@ func TestRunCommandExistingMaintenanceRejectsGooseBootstrapBeforeConfiguration(t
 				t.Fatalf("read Goose bootstrap before command: %v", err)
 			}
 
-			err = runCommand(ctx, []string{"db", action}, &bytes.Buffer{}, nil)
+			err = runDatabaseTestCommand(ctx, action, dbPath, &bytes.Buffer{})
 			if !errors.Is(err, storage.ErrSchemaNotReady) {
 				t.Fatalf("db %s error = %v, want ErrSchemaNotReady", action, err)
 			}
@@ -252,10 +261,10 @@ func assertCommandDatabaseJournalMode(t *testing.T, ctx context.Context, path, w
 	}
 }
 
-func TestRunCommandStatusDoesNotCreateMissingDatabase(t *testing.T) {
+func TestRunDatabaseStatusDoesNotCreateMissingDatabase(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
 	var out bytes.Buffer
-	if err := runCommand(context.Background(), []string{"db", "status"}, &out, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(context.Background(), "status", dbPath, &out); err != nil {
 		t.Fatalf("db status: %v", err)
 	}
 	if !strings.Contains(out.String(), "current=0 target=1 pending=1") {
@@ -266,7 +275,7 @@ func TestRunCommandStatusDoesNotCreateMissingDatabase(t *testing.T) {
 	}
 }
 
-func TestRunCommandStatusDoesNotModifyEmptyDatabaseFile(t *testing.T) {
+func TestRunDatabaseStatusDoesNotModifyEmptyDatabaseFile(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
 	file, err := os.OpenFile(dbPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -277,7 +286,7 @@ func TestRunCommandStatusDoesNotModifyEmptyDatabaseFile(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runCommand(context.Background(), []string{"db", "status"}, &out, nil); err != nil {
+	if err := runDatabaseTestCommand(context.Background(), "status", dbPath, &out); err != nil {
 		t.Fatalf("db status: %v", err)
 	}
 	if !strings.Contains(out.String(), "current=0 target=1 pending=1") {
@@ -292,15 +301,13 @@ func TestRunCommandStatusDoesNotModifyEmptyDatabaseFile(t *testing.T) {
 	}
 }
 
-func TestRunCommandExistingDatabaseActionsDoNotCreateMissingArtifacts(t *testing.T) {
+func TestRunDatabaseExistingDatabaseActionsDoNotCreateMissingArtifacts(t *testing.T) {
 	for _, action := range []string{"verify", "backup"} {
 		t.Run(action, func(t *testing.T) {
 			root := t.TempDir()
 			dbPath := filepath.Join(root, "missing-parent", "commands.db")
-			t.Setenv("MINTRUD_ADMIN_ENV", "dev")
-			t.Setenv("MINTRUD_ADMIN_DB", dbPath)
 
-			err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+			err := runDatabaseTestCommand(context.Background(), action, dbPath, &bytes.Buffer{})
 			if !errors.Is(err, storage.ErrSchemaNotReady) {
 				t.Fatalf("db %s error = %v, want ErrSchemaNotReady", action, err)
 			}
@@ -313,7 +320,7 @@ func TestRunCommandExistingDatabaseActionsDoNotCreateMissingArtifacts(t *testing
 	}
 }
 
-func TestRunCommandExistingDatabaseActionsDoNotLockEmptyOrInvalidFiles(t *testing.T) {
+func TestRunDatabaseExistingDatabaseActionsDoNotLockEmptyOrInvalidFiles(t *testing.T) {
 	for _, fixture := range []struct {
 		name    string
 		content []byte
@@ -329,7 +336,7 @@ func TestRunCommandExistingDatabaseActionsDoNotLockEmptyOrInvalidFiles(t *testin
 					t.Fatalf("create fixture: %v", err)
 				}
 
-				err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+				err := runDatabaseTestCommand(context.Background(), action, dbPath, &bytes.Buffer{})
 				if !errors.Is(err, fixture.wantErr) {
 					t.Fatalf("db %s error = %v, want %v", action, err, fixture.wantErr)
 				}
@@ -348,7 +355,7 @@ func TestRunCommandExistingDatabaseActionsDoNotLockEmptyOrInvalidFiles(t *testin
 	}
 }
 
-func TestRunCommandExistingDatabaseActionsDoNotLockForeignSQLiteFiles(t *testing.T) {
+func TestRunDatabaseExistingDatabaseActionsDoNotLockForeignSQLiteFiles(t *testing.T) {
 	for _, fixture := range []struct {
 		name      string
 		configure func(*testing.T, string)
@@ -392,7 +399,7 @@ func TestRunCommandExistingDatabaseActionsDoNotLockForeignSQLiteFiles(t *testing
 				dbPath := configureCommandDatabase(t)
 				fixture.configure(t, dbPath)
 
-				err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+				err := runDatabaseTestCommand(context.Background(), action, dbPath, &bytes.Buffer{})
 				if !errors.Is(err, fixture.wantErr) {
 					t.Fatalf("db %s error = %v, want %v", action, err, fixture.wantErr)
 				}
@@ -404,18 +411,15 @@ func TestRunCommandExistingDatabaseActionsDoNotLockForeignSQLiteFiles(t *testing
 	}
 }
 
-func TestRunCommandStatusRejectsDanglingSymlinkAndNonRegularPath(t *testing.T) {
+func TestRunDatabaseStatusRejectsDanglingSymlinkAndNonRegularPath(t *testing.T) {
 	t.Run("dangling-symlink", func(t *testing.T) {
 		root := t.TempDir()
 		dbPath := filepath.Join(root, "alias.db")
 		if err := os.Symlink(filepath.Join(root, "missing.db"), dbPath); err != nil {
 			t.Skipf("symlinks unavailable: %v", err)
 		}
-		t.Setenv("MINTRUD_ADMIN_ENV", "dev")
-		t.Setenv("MINTRUD_ADMIN_DB", dbPath)
-
 		for _, action := range []string{"status", "verify", "backup"} {
-			err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+			err := runDatabaseTestCommand(context.Background(), action, dbPath, &bytes.Buffer{})
 			if err == nil {
 				t.Fatalf("db %s error = nil, want dangling symlink rejection", action)
 			}
@@ -434,7 +438,7 @@ func TestRunCommandStatusRejectsDanglingSymlinkAndNonRegularPath(t *testing.T) {
 			t.Fatalf("create directory fixture: %v", err)
 		}
 		for _, action := range []string{"status", "verify", "backup"} {
-			err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, nil)
+			err := runDatabaseTestCommand(context.Background(), action, dbPath, &bytes.Buffer{})
 			if err == nil {
 				t.Fatalf("db %s error = nil, want non-regular path rejection", action)
 			}
@@ -445,12 +449,10 @@ func TestRunCommandStatusRejectsDanglingSymlinkAndNonRegularPath(t *testing.T) {
 	})
 }
 
-func TestRunCommandBackupUsesCanonicalDatabasePathThroughSymlink(t *testing.T) {
+func TestRunDatabaseBackupUsesCanonicalDatabasePathThroughSymlink(t *testing.T) {
 	root := t.TempDir()
 	realPath := filepath.Join(root, "real.db")
-	t.Setenv("MINTRUD_ADMIN_ENV", "dev")
-	t.Setenv("MINTRUD_ADMIN_DB", realPath)
-	if err := runCommand(context.Background(), []string{"db", "migrate"}, &bytes.Buffer{}, nil); err != nil {
+	if err := runDatabaseTestCommand(context.Background(), "migrate", realPath, &bytes.Buffer{}); err != nil {
 		t.Fatalf("migrate real database: %v", err)
 	}
 	if err := os.Remove(realPath + ".lock"); err != nil {
@@ -461,9 +463,8 @@ func TestRunCommandBackupUsesCanonicalDatabasePathThroughSymlink(t *testing.T) {
 	if err := os.Symlink(realPath, aliasPath); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	t.Setenv("MINTRUD_ADMIN_DB", aliasPath)
 	var out bytes.Buffer
-	if err := runCommand(context.Background(), []string{"db", "backup"}, &out, nil); err != nil {
+	if err := runDatabaseTestCommand(context.Background(), "backup", aliasPath, &out); err != nil {
 		t.Fatalf("backup through symlink: %v", err)
 	}
 	backupPath := strings.TrimPrefix(strings.TrimSpace(out.String()), "backup=")
@@ -478,15 +479,15 @@ func TestRunCommandBackupUsesCanonicalDatabasePathThroughSymlink(t *testing.T) {
 	}
 }
 
-func TestRunCommandVerifyAndBackup(t *testing.T) {
-	configureCommandDatabase(t)
+func TestRunDatabaseVerifyAndBackup(t *testing.T) {
+	dbPath := configureCommandDatabase(t)
 	ctx := context.Background()
-	if err := runCommand(ctx, []string{"db", "migrate"}, &bytes.Buffer{}, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "migrate", dbPath, &bytes.Buffer{}); err != nil {
 		t.Fatalf("db migrate: %v", err)
 	}
 
 	var verifyOut bytes.Buffer
-	if err := runCommand(ctx, []string{"db", "verify"}, &verifyOut, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "verify", dbPath, &verifyOut); err != nil {
 		t.Fatalf("db verify: %v", err)
 	}
 	if !strings.Contains(verifyOut.String(), "verification=ok") {
@@ -494,7 +495,7 @@ func TestRunCommandVerifyAndBackup(t *testing.T) {
 	}
 
 	var backupOut bytes.Buffer
-	if err := runCommand(ctx, []string{"db", "backup"}, &backupOut, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "backup", dbPath, &backupOut); err != nil {
 		t.Fatalf("db backup: %v", err)
 	}
 	line := strings.TrimSpace(backupOut.String())
@@ -510,7 +511,7 @@ func TestRunCommandVerifyAndBackup(t *testing.T) {
 	}
 }
 
-func TestRunCommandVerifyRejectsDatabaseWithPendingSchema(t *testing.T) {
+func TestRunDatabaseVerifyRejectsDatabaseWithPendingSchema(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
 	ctx := context.Background()
 	db, err := storage.Open(ctx, dbPath)
@@ -533,15 +534,15 @@ func TestRunCommandVerifyRejectsDatabaseWithPendingSchema(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatalf("close pending database: %v", err)
 	}
-	err = runCommand(ctx, []string{"db", "verify"}, &bytes.Buffer{}, zap.NewNop())
+	err = runDatabaseTestCommand(ctx, "verify", dbPath, &bytes.Buffer{})
 	if !errors.Is(err, storage.ErrSchemaNotReady) {
 		t.Fatalf("db verify error = %v, want ErrSchemaNotReady", err)
 	}
 }
 
-func TestRunCommandMutatingDatabaseCommandsRespectOwnerLock(t *testing.T) {
+func TestRunDatabaseMutatingDatabaseCommandsRespectOwnerLock(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
-	if err := runCommand(context.Background(), []string{"db", "migrate"}, &bytes.Buffer{}, nil); err != nil {
+	if err := runDatabaseTestCommand(context.Background(), "migrate", dbPath, &bytes.Buffer{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	owner, err := storage.AcquireOwnerLock(dbPath)
@@ -551,17 +552,17 @@ func TestRunCommandMutatingDatabaseCommandsRespectOwnerLock(t *testing.T) {
 	defer owner.Close()
 
 	for _, action := range []string{"migrate", "verify", "backup"} {
-		err := runCommand(context.Background(), []string{"db", action}, &bytes.Buffer{}, zap.NewNop())
+		err := runDatabaseTestCommand(context.Background(), action, dbPath, &bytes.Buffer{})
 		if !errors.Is(err, storage.ErrDatabaseInUse) {
 			t.Fatalf("db %s error = %v, want ErrDatabaseInUse", action, err)
 		}
 	}
 }
 
-func TestRunCommandStatusIsAllowedWhileOwnerLockIsHeld(t *testing.T) {
+func TestRunDatabaseStatusIsAllowedWhileOwnerLockIsHeld(t *testing.T) {
 	dbPath := configureCommandDatabase(t)
 	ctx := context.Background()
-	if err := runCommand(ctx, []string{"db", "migrate"}, &bytes.Buffer{}, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "migrate", dbPath, &bytes.Buffer{}); err != nil {
 		t.Fatalf("db migrate: %v", err)
 	}
 	owner, err := storage.AcquireOwnerLock(dbPath)
@@ -576,7 +577,7 @@ func TestRunCommandStatusIsAllowedWhileOwnerLockIsHeld(t *testing.T) {
 	defer database.Close()
 
 	var out bytes.Buffer
-	if err := runCommand(ctx, []string{"db", "status"}, &out, zap.NewNop()); err != nil {
+	if err := runDatabaseTestCommand(ctx, "status", dbPath, &out); err != nil {
 		t.Fatalf("db status with owner lock: %v", err)
 	}
 	if !strings.Contains(out.String(), "current=1 target=1 pending=0") {
@@ -644,58 +645,5 @@ func TestMigrationLoggingIncludesVersionsNamesAndDuration(t *testing.T) {
 		if _, ok := preparationFields[field]; !ok {
 			t.Fatalf("preparation failure log missing field %q: %v", field, preparationFields)
 		}
-	}
-}
-
-func TestRunCommandRejectsUnknownCommand(t *testing.T) {
-	configureCommandDatabase(t)
-	err := runCommand(context.Background(), []string{"unknown"}, &bytes.Buffer{}, zap.NewNop())
-	if !errors.Is(err, ErrUsage) {
-		t.Fatalf("run error = %v, want ErrUsage", err)
-	}
-}
-
-func TestRunCommandRejectsUnknownDatabaseCommand(t *testing.T) {
-	configureCommandDatabase(t)
-	err := runCommand(context.Background(), []string{"db", "unknown"}, &bytes.Buffer{}, nil)
-	if !errors.Is(err, ErrUsage) {
-		t.Fatalf("run error = %v, want ErrUsage", err)
-	}
-}
-
-func TestRunCommandRejectsUnknownCommandBeforeLoadingRuntimeConfig(t *testing.T) {
-	t.Setenv("MINTRUD_ADMIN_ENV", "prod")
-	t.Setenv("MINTRUD_ADMIN_DB", filepath.Join("relative", "customer.db"))
-
-	for _, args := range [][]string{{"unknown"}, {"db", "unknown"}} {
-		err := runCommand(context.Background(), args, &bytes.Buffer{}, nil)
-		if !errors.Is(err, ErrUsage) {
-			t.Fatalf("runCommand(%q) error = %v, want ErrUsage", args, err)
-		}
-	}
-}
-
-func TestRunCommandUsageDoesNotEchoRawArguments(t *testing.T) {
-	configureCommandDatabase(t)
-	sensitiveArgument := "synthetic-secret-command-argument"
-	err := runCommand(context.Background(), []string{"unknown", sensitiveArgument}, &bytes.Buffer{}, nil)
-	if !errors.Is(err, ErrUsage) {
-		t.Fatalf("run error = %v, want ErrUsage", err)
-	}
-	if strings.Contains(err.Error(), sensitiveArgument) {
-		t.Fatalf("usage error echoed raw argument: %v", err)
-	}
-	err = runDatabaseCommand(
-		context.Background(),
-		sensitiveArgument,
-		runtimeConfig{DBPath: filepath.Join(t.TempDir(), "unused.db")},
-		&bytes.Buffer{},
-		nil,
-	)
-	if !errors.Is(err, ErrUsage) {
-		t.Fatalf("direct database command error = %v, want ErrUsage", err)
-	}
-	if strings.Contains(err.Error(), sensitiveArgument) {
-		t.Fatalf("database usage error echoed raw action: %v", err)
 	}
 }
