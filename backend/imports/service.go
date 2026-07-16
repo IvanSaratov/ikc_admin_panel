@@ -3,7 +3,6 @@ package imports
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -247,7 +246,7 @@ func (s *Service) insertQueuedImport(
 	}
 
 	for _, sheet := range plan.Sheets {
-		headerMap, err := marshalSheetPlan(sheet)
+		headerMap, err := legacy.EncodeSheetPlan(sheet)
 		if err != nil {
 			return EnqueueResult{}, &ServiceError{Code: CodeInternal, Detail: "encode workbook structure", Err: err}
 		}
@@ -270,24 +269,6 @@ func (s *Service) insertQueuedImport(
 		Import:        created,
 		QueuePosition: active + 1,
 	}, nil
-}
-
-type persistedSheetPlan struct {
-	HeaderRow   int64                `json:"header_row"`
-	Fields      map[int]legacy.Field `json:"fields"`
-	ExtraFields map[int]string       `json:"extra_fields,omitempty"`
-}
-
-func marshalSheetPlan(sheet legacy.SheetPlan) (string, error) {
-	encoded, err := json.Marshal(persistedSheetPlan{
-		HeaderRow:   sheet.HeaderRow,
-		Fields:      sheet.HeaderMap,
-		ExtraFields: sheet.ExtraNames,
-	})
-	if err != nil {
-		return "", err
-	}
-	return string(encoded), nil
 }
 
 func (s *Service) reuseResult(ctx context.Context, existing storagedb.Import) (EnqueueResult, error) {

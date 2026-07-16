@@ -17,6 +17,7 @@ import (
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/imports"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/imports/legacy"
 	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/xuri/excelize/v2"
 )
@@ -234,18 +235,21 @@ func TestEnqueueLegacyPersistsQueuedImportAndSafeSheetPlans(t *testing.T) {
 	if len(sheets) != 5 {
 		t.Fatalf("sheet count = %d, want 5", len(sheets))
 	}
+	workbookPlan := legacy.WorkbookPlan{Sheets: make([]legacy.SheetPlan, 0, len(sheets))}
 	for _, sheet := range sheets {
-		var plan struct {
-			HeaderRow   int64             `json:"header_row"`
-			Fields      map[string]string `json:"fields"`
-			ExtraFields map[string]string `json:"extra_fields"`
-		}
-		if err := json.Unmarshal([]byte(sheet.HeaderMap), &plan); err != nil {
+		plan, err := legacy.DecodeSheetPlan(
+			sheet.SheetName,
+			int(sheet.SheetOrder),
+			legacy.SheetProfile(sheet.SheetProfile),
+			sheet.HeaderMap,
+		)
+		if err != nil {
 			t.Fatalf("decode sheet plan %s: %v", sheet.SheetName, err)
 		}
-		if plan.HeaderRow != 1 || len(plan.Fields) < 14 || plan.Fields["0"] != "employer" {
+		if plan.HeaderRow != 1 || len(plan.HeaderMap) < 14 || plan.HeaderMap[0] != legacy.FieldEmployer {
 			t.Fatalf("unsafe or incomplete sheet plan %s: %+v", sheet.SheetName, plan)
 		}
+		workbookPlan.Sheets = append(workbookPlan.Sheets, plan)
 		if strings.Contains(strings.ToLower(sheet.HeaderMap), "password") || strings.Contains(sheet.HeaderMap, "Пароль") {
 			t.Fatalf("secret header persisted for sheet %s", sheet.SheetName)
 		}
@@ -254,6 +258,28 @@ func TestEnqueueLegacyPersistsQueuedImportAndSafeSheetPlans(t *testing.T) {
 				t.Fatalf("row data persisted in sheet plan %s", sheet.SheetName)
 			}
 		}
+	}
+
+	var restoredRows []legacy.SourceRow
+	_, err = legacy.Parse(
+		context.Background(),
+		filepath.Join(fixture.root, result.Import.TempFileToken.String+".upload"),
+		workbookPlan,
+		legacy.DefaultLimits(),
+		func(_ context.Context, row legacy.SourceRow) error {
+			restoredRows = append(restoredRows, row)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("parse with restored sheet plans: %v", err)
+	}
+	restoredJSON, err := json.Marshal(restoredRows)
+	if err != nil {
+		t.Fatalf("encode restored rows: %v", err)
+	}
+	if strings.Contains(strings.ToLower(string(restoredJSON)), "synthetic-password") {
+		t.Fatalf("restored sheet plans exposed password: %s", restoredJSON)
 	}
 }
 
