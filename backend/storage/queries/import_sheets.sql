@@ -31,3 +31,47 @@ SET rows_found = ?,
     updated_at = ?
 WHERE id = ?
 RETURNING *;
+
+-- name: UpdateImportSheetStagingProgress :one
+UPDATE import_sheets
+SET rows_found = sqlc.arg(rows_found),
+    rows_staged = sqlc.arg(rows_staged),
+    status = 'parsing',
+    updated_at = sqlc.arg(updated_at)
+WHERE import_sheets.id = sqlc.arg(sheet_id)
+  AND import_sheets.import_id = sqlc.arg(import_id)
+  AND import_sheets.rows_found <= sqlc.arg(rows_found)
+  AND import_sheets.rows_staged <= sqlc.arg(rows_staged)
+  AND import_sheets.status IN ('pending', 'parsing')
+  AND EXISTS (
+    SELECT 1
+    FROM imports AS owned_import
+    WHERE owned_import.id = sqlc.arg(import_id)
+      AND owned_import.status = 'processing'
+      AND owned_import.phase = 'staging'
+      AND owned_import.lease_owner = sqlc.arg(lease_owner)
+      AND owned_import.lease_expires_at >= sqlc.arg(now)
+  )
+RETURNING *;
+
+-- name: CompleteImportSheetStaging :one
+UPDATE import_sheets
+SET rows_found = sqlc.arg(rows_found),
+    rows_staged = sqlc.arg(rows_staged),
+    status = 'staged',
+    updated_at = sqlc.arg(updated_at)
+WHERE import_sheets.id = sqlc.arg(sheet_id)
+  AND import_sheets.import_id = sqlc.arg(import_id)
+  AND import_sheets.rows_found <= sqlc.arg(rows_found)
+  AND import_sheets.rows_staged <= sqlc.arg(rows_staged)
+  AND import_sheets.status IN ('pending', 'parsing', 'staged')
+  AND EXISTS (
+    SELECT 1
+    FROM imports AS owned_import
+    WHERE owned_import.id = sqlc.arg(import_id)
+      AND owned_import.status = 'processing'
+      AND owned_import.phase = 'staging'
+      AND owned_import.lease_owner = sqlc.arg(lease_owner)
+      AND owned_import.lease_expires_at >= sqlc.arg(now)
+  )
+RETURNING *;

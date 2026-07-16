@@ -71,6 +71,308 @@ func TestClaimNextImportKeepsSingleActiveLease(t *testing.T) {
 	}
 }
 
+func TestStagingLeaseOwnsPhaseProgressAndCleanup(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	database := openDatabase(t)
+	queries := storagedb.New(database)
+	now := sql.NullString{String: "2026-07-16T12:00:00Z", Valid: true}
+	leaseExpiry := sql.NullString{String: "2026-07-16T12:02:00Z", Valid: true}
+	_, err := queries.CreateImport(ctx, storagedb.CreateImportParams{
+		Profile:           "legacy_registry",
+		SourceSha256:      sql.NullString{String: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Valid: true},
+		SourceSizeBytes:   sql.NullInt64{Int64: 1024, Valid: true},
+		UploadedByActor:   "test-admin",
+		ReceivedAt:        now.String,
+		Status:            "queued",
+		TempFileToken:     sql.NullString{String: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Valid: true},
+		TempFileExpiresAt: sql.NullString{String: "2026-07-17T12:00:00Z", Valid: true},
+		CreatedAt:         now.String,
+		UpdatedAt:         now.String,
+	})
+	if err != nil {
+		t.Fatalf("create import: %v", err)
+	}
+	claimed, err := queries.ClaimNextImport(ctx, storagedb.ClaimNextImportParams{
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+		LeaseExpiresAt: leaseExpiry,
+		Now:            now,
+	})
+	if err != nil {
+		t.Fatalf("claim import: %v", err)
+	}
+
+	_, err = queries.StartImportStaging(ctx, storagedb.StartImportStagingParams{
+		LeaseExpiresAt: leaseExpiry,
+		Now:            now,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-b", Valid: true},
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("foreign owner start error = %v, want sql.ErrNoRows", err)
+	}
+	expiredNow := sql.NullString{String: "2026-07-16T12:03:00Z", Valid: true}
+	_, err = queries.StartImportStaging(ctx, storagedb.StartImportStagingParams{
+		LeaseExpiresAt: sql.NullString{String: "2026-07-16T12:05:00Z", Valid: true},
+		Now:            expiredNow,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expired owner renewed staging lease: %v", err)
+	}
+	staging, err := queries.StartImportStaging(ctx, storagedb.StartImportStagingParams{
+		LeaseExpiresAt: leaseExpiry,
+		Now:            now,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("start staging: %v", err)
+	}
+	if staging.Phase.String != "staging" || staging.RowsTotal != 0 {
+		t.Fatalf("staging state = %+v", staging)
+	}
+
+	progress, err := queries.UpdateImportStagingProgress(ctx, storagedb.UpdateImportStagingProgressParams{
+		RowsTotal:      3,
+		Now:            now,
+		LeaseExpiresAt: leaseExpiry,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("update staging progress: %v", err)
+	}
+	if progress.RowsTotal != 3 {
+		t.Fatalf("rows total = %d, want 3", progress.RowsTotal)
+	}
+	_, err = queries.UpdateImportStagingProgress(ctx, storagedb.UpdateImportStagingProgressParams{
+		RowsTotal:      2,
+		Now:            now,
+		LeaseExpiresAt: leaseExpiry,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("decreasing progress error = %v, want sql.ErrNoRows", err)
+	}
+
+	completed, err := queries.CompleteImportStaging(ctx, storagedb.CompleteImportStagingParams{
+		RowsTotal:      3,
+		Now:            now,
+		LeaseExpiresAt: leaseExpiry,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("complete staging: %v", err)
+	}
+	if completed.Phase.String != "validating" || !completed.StagedAt.Valid || !completed.TempFileToken.Valid {
+		t.Fatalf("completed staging state = %+v", completed)
+	}
+	_, err = queries.StartImportStaging(ctx, storagedb.StartImportStagingParams{
+		LeaseExpiresAt: leaseExpiry,
+		Now:            now,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("validating import restarted staging: %v", err)
+	}
+	_, err = queries.ClearImportTempFile(ctx, storagedb.ClearImportTempFileParams{
+		Now:        now.String,
+		ImportID:   claimed.ID,
+		LeaseOwner: sql.NullString{String: "lease-b", Valid: true},
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("foreign owner cleanup error = %v, want sql.ErrNoRows", err)
+	}
+	cleaned, err := queries.ClearImportTempFile(ctx, storagedb.ClearImportTempFileParams{
+		Now:        now.String,
+		ImportID:   claimed.ID,
+		LeaseOwner: sql.NullString{String: "lease-a", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("clear import temp file: %v", err)
+	}
+	if cleaned.TempFileToken.Valid || cleaned.TempFileExpiresAt.Valid {
+		t.Fatalf("temporary source metadata survived cleanup: %+v", cleaned)
+	}
+}
+
+func TestStagingCheckpointTransactionRollsBackWhenLeaseIsLost(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	database := openDatabase(t)
+	queries := storagedb.New(database)
+	now := sql.NullString{String: "2026-07-16T12:00:00Z", Valid: true}
+	leaseExpiry := sql.NullString{String: "2026-07-16T12:02:00Z", Valid: true}
+	created, err := queries.CreateImport(ctx, storagedb.CreateImportParams{
+		Profile:         "legacy_registry",
+		UploadedByActor: "test-admin",
+		ReceivedAt:      now.String,
+		Status:          "queued",
+		CreatedAt:       now.String,
+		UpdatedAt:       now.String,
+	})
+	if err != nil {
+		t.Fatalf("create import: %v", err)
+	}
+	sheet, err := queries.CreateImportSheet(ctx, storagedb.CreateImportSheetParams{
+		ImportID:     created.ID,
+		SheetName:    "А",
+		SheetOrder:   1,
+		SheetProfile: "А",
+		HeaderMap:    `{"version":1}`,
+		CreatedAt:    now.String,
+		UpdatedAt:    now.String,
+	})
+	if err != nil {
+		t.Fatalf("create import sheet: %v", err)
+	}
+	claimed, err := queries.ClaimNextImport(ctx, storagedb.ClaimNextImportParams{
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+		LeaseExpiresAt: leaseExpiry,
+		Now:            now,
+	})
+	if err != nil {
+		t.Fatalf("claim import: %v", err)
+	}
+	if _, err := queries.StartImportStaging(ctx, storagedb.StartImportStagingParams{
+		LeaseExpiresAt: leaseExpiry,
+		Now:            now,
+		ImportID:       claimed.ID,
+		LeaseOwner:     sql.NullString{String: "lease-a", Valid: true},
+	}); err != nil {
+		t.Fatalf("start staging: %v", err)
+	}
+
+	writeBatch := func(owner string) error {
+		tx, err := database.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		txQueries := queries.WithTx(tx)
+		row, err := txQueries.CreateImportRow(ctx, storagedb.CreateImportRowParams{
+			ImportID:  claimed.ID,
+			SheetName: "А",
+			RowNumber: 2,
+			RawData:   `{"safe":"synthetic"}`,
+			CreatedAt: now.String,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := txQueries.CreateLegacyImportRow(ctx, storagedb.CreateLegacyImportRowParams{
+			ImportRowID:       row.ID,
+			SourceFingerprint: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			ExtraFields:       `{}`,
+			CreatedAt:         now.String,
+			UpdatedAt:         now.String,
+		}); err != nil {
+			return err
+		}
+		if _, err := txQueries.UpdateImportSheetStagingProgress(ctx, storagedb.UpdateImportSheetStagingProgressParams{
+			RowsFound:  1,
+			RowsStaged: 1,
+			UpdatedAt:  now.String,
+			SheetID:    sheet.ID,
+			ImportID:   claimed.ID,
+			LeaseOwner: sql.NullString{String: owner, Valid: true},
+			Now:        now,
+		}); err != nil {
+			return err
+		}
+		if _, err := txQueries.UpdateImportStagingProgress(ctx, storagedb.UpdateImportStagingProgressParams{
+			RowsTotal:      1,
+			Now:            now,
+			LeaseExpiresAt: leaseExpiry,
+			ImportID:       claimed.ID,
+			LeaseOwner:     sql.NullString{String: owner, Valid: true},
+		}); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	if err := writeBatch("lease-b"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("foreign-owner batch error = %v, want sql.ErrNoRows", err)
+	}
+	_, err = queries.GetImportRowByCoordinate(ctx, storagedb.GetImportRowByCoordinateParams{
+		ImportID:  claimed.ID,
+		SheetName: "А",
+		RowNumber: 2,
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("rolled-back row lookup error = %v, want sql.ErrNoRows", err)
+	}
+
+	if err := writeBatch("lease-a"); err != nil {
+		t.Fatalf("owned batch: %v", err)
+	}
+	row, err := queries.GetImportRowByCoordinate(ctx, storagedb.GetImportRowByCoordinateParams{
+		ImportID:  claimed.ID,
+		SheetName: "А",
+		RowNumber: 2,
+	})
+	if err != nil {
+		t.Fatalf("get committed import row: %v", err)
+	}
+	if _, err := queries.GetLegacyImportRow(ctx, row.ID); err != nil {
+		t.Fatalf("get committed legacy row: %v", err)
+	}
+	updatedSheet, err := queries.GetImportSheet(ctx, storagedb.GetImportSheetParams{ImportID: claimed.ID, SheetName: "А"})
+	if err != nil {
+		t.Fatalf("get updated sheet: %v", err)
+	}
+	if updatedSheet.RowsStaged != 1 || updatedSheet.Status != "parsing" {
+		t.Fatalf("sheet checkpoint = %+v", updatedSheet)
+	}
+	_, err = queries.UpdateImportSheetStagingProgress(ctx, storagedb.UpdateImportSheetStagingProgressParams{
+		RowsFound:  1,
+		RowsStaged: 1,
+		UpdatedAt:  now.String,
+		SheetID:    sheet.ID,
+		ImportID:   claimed.ID,
+		LeaseOwner: sql.NullString{String: "lease-b", Valid: true},
+		Now:        now,
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("foreign owner changed sheet checkpoint: %v", err)
+	}
+	_, err = queries.UpdateImportSheetStagingProgress(ctx, storagedb.UpdateImportSheetStagingProgressParams{
+		RowsFound:  0,
+		RowsStaged: 1,
+		UpdatedAt:  now.String,
+		SheetID:    sheet.ID,
+		ImportID:   claimed.ID,
+		LeaseOwner: sql.NullString{String: "lease-a", Valid: true},
+		Now:        now,
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("decreasing sheet progress error = %v, want sql.ErrNoRows", err)
+	}
+	stagedSheet, err := queries.CompleteImportSheetStaging(ctx, storagedb.CompleteImportSheetStagingParams{
+		RowsFound:  1,
+		RowsStaged: 1,
+		UpdatedAt:  now.String,
+		SheetID:    sheet.ID,
+		ImportID:   claimed.ID,
+		LeaseOwner: sql.NullString{String: "lease-a", Valid: true},
+		Now:        now,
+	})
+	if err != nil {
+		t.Fatalf("complete sheet staging: %v", err)
+	}
+	if stagedSheet.Status != "staged" || stagedSheet.RowsStaged != 1 {
+		t.Fatalf("completed sheet checkpoint = %+v", stagedSheet)
+	}
+}
+
 func TestGeneratedQueriesPersistImportSheet(t *testing.T) {
 	t.Parallel()
 

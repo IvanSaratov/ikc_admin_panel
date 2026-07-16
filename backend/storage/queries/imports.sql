@@ -159,6 +159,62 @@ WHERE id = (
 )
 RETURNING *;
 
+-- name: StartImportStaging :one
+UPDATE imports
+SET phase = 'staging',
+    heartbeat_at = sqlc.arg(now),
+    lease_expires_at = sqlc.arg(lease_expires_at),
+    updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(import_id)
+  AND status = 'processing'
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND lease_expires_at >= sqlc.arg(now)
+  AND phase IN ('parsing', 'staging')
+RETURNING *;
+
+-- name: UpdateImportStagingProgress :one
+UPDATE imports
+SET rows_total = sqlc.arg(rows_total),
+    heartbeat_at = sqlc.arg(now),
+    lease_expires_at = sqlc.arg(lease_expires_at),
+    updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(import_id)
+  AND status = 'processing'
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND lease_expires_at >= sqlc.arg(now)
+  AND phase = 'staging'
+  AND rows_total <= sqlc.arg(rows_total)
+RETURNING *;
+
+-- name: CompleteImportStaging :one
+UPDATE imports
+SET phase = 'validating',
+    rows_total = sqlc.arg(rows_total),
+    staged_at = sqlc.arg(now),
+    heartbeat_at = sqlc.arg(now),
+    lease_expires_at = sqlc.arg(lease_expires_at),
+    updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(import_id)
+  AND status = 'processing'
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND lease_expires_at >= sqlc.arg(now)
+  AND phase = 'staging'
+  AND rows_total <= sqlc.arg(rows_total)
+RETURNING *;
+
+-- name: ClearImportTempFile :one
+UPDATE imports
+SET temp_file_token = NULL,
+    temp_file_expires_at = NULL,
+    updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(import_id)
+  AND status = 'processing'
+  AND lease_owner = sqlc.arg(lease_owner)
+  AND lease_expires_at >= sqlc.arg(now)
+  AND phase = 'validating'
+  AND staged_at IS NOT NULL
+RETURNING *;
+
 -- name: UpdateImportProgress :one
 UPDATE imports
 SET rows_total = ?,
@@ -212,4 +268,12 @@ ORDER BY COALESCE(import_sheets.sheet_order, 0) ASC,
 SELECT *
 FROM import_rows
 WHERE id = ?
+LIMIT 1;
+
+-- name: GetImportRowByCoordinate :one
+SELECT *
+FROM import_rows
+WHERE import_id = sqlc.arg(import_id)
+  AND sheet_name = sqlc.arg(sheet_name)
+  AND row_number = sqlc.arg(row_number)
 LIMIT 1;

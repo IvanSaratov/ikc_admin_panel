@@ -7,7 +7,68 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
+
+const completeImportSheetStaging = `-- name: CompleteImportSheetStaging :one
+UPDATE import_sheets
+SET rows_found = ?1,
+    rows_staged = ?2,
+    status = 'staged',
+    updated_at = ?3
+WHERE import_sheets.id = ?4
+  AND import_sheets.import_id = ?5
+  AND import_sheets.rows_found <= ?1
+  AND import_sheets.rows_staged <= ?2
+  AND import_sheets.status IN ('pending', 'parsing', 'staged')
+  AND EXISTS (
+    SELECT 1
+    FROM imports AS owned_import
+    WHERE owned_import.id = ?5
+      AND owned_import.status = 'processing'
+      AND owned_import.phase = 'staging'
+      AND owned_import.lease_owner = ?6
+      AND owned_import.lease_expires_at >= ?7
+  )
+RETURNING id, import_id, sheet_name, sheet_order, sheet_profile, header_map, rows_found, rows_staged, status, created_at, updated_at
+`
+
+type CompleteImportSheetStagingParams struct {
+	RowsFound  int64          `json:"rows_found"`
+	RowsStaged int64          `json:"rows_staged"`
+	UpdatedAt  string         `json:"updated_at"`
+	SheetID    int64          `json:"sheet_id"`
+	ImportID   int64          `json:"import_id"`
+	LeaseOwner sql.NullString `json:"lease_owner"`
+	Now        sql.NullString `json:"now"`
+}
+
+func (q *Queries) CompleteImportSheetStaging(ctx context.Context, arg CompleteImportSheetStagingParams) (ImportSheet, error) {
+	row := q.db.QueryRowContext(ctx, completeImportSheetStaging,
+		arg.RowsFound,
+		arg.RowsStaged,
+		arg.UpdatedAt,
+		arg.SheetID,
+		arg.ImportID,
+		arg.LeaseOwner,
+		arg.Now,
+	)
+	var i ImportSheet
+	err := row.Scan(
+		&i.ID,
+		&i.ImportID,
+		&i.SheetName,
+		&i.SheetOrder,
+		&i.SheetProfile,
+		&i.HeaderMap,
+		&i.RowsFound,
+		&i.RowsStaged,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const createImportSheet = `-- name: CreateImportSheet :one
 INSERT INTO import_sheets (
@@ -158,6 +219,66 @@ func (q *Queries) UpdateImportSheetProgress(ctx context.Context, arg UpdateImpor
 		arg.Status,
 		arg.UpdatedAt,
 		arg.ID,
+	)
+	var i ImportSheet
+	err := row.Scan(
+		&i.ID,
+		&i.ImportID,
+		&i.SheetName,
+		&i.SheetOrder,
+		&i.SheetProfile,
+		&i.HeaderMap,
+		&i.RowsFound,
+		&i.RowsStaged,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateImportSheetStagingProgress = `-- name: UpdateImportSheetStagingProgress :one
+UPDATE import_sheets
+SET rows_found = ?1,
+    rows_staged = ?2,
+    status = 'parsing',
+    updated_at = ?3
+WHERE import_sheets.id = ?4
+  AND import_sheets.import_id = ?5
+  AND import_sheets.rows_found <= ?1
+  AND import_sheets.rows_staged <= ?2
+  AND import_sheets.status IN ('pending', 'parsing')
+  AND EXISTS (
+    SELECT 1
+    FROM imports AS owned_import
+    WHERE owned_import.id = ?5
+      AND owned_import.status = 'processing'
+      AND owned_import.phase = 'staging'
+      AND owned_import.lease_owner = ?6
+      AND owned_import.lease_expires_at >= ?7
+  )
+RETURNING id, import_id, sheet_name, sheet_order, sheet_profile, header_map, rows_found, rows_staged, status, created_at, updated_at
+`
+
+type UpdateImportSheetStagingProgressParams struct {
+	RowsFound  int64          `json:"rows_found"`
+	RowsStaged int64          `json:"rows_staged"`
+	UpdatedAt  string         `json:"updated_at"`
+	SheetID    int64          `json:"sheet_id"`
+	ImportID   int64          `json:"import_id"`
+	LeaseOwner sql.NullString `json:"lease_owner"`
+	Now        sql.NullString `json:"now"`
+}
+
+func (q *Queries) UpdateImportSheetStagingProgress(ctx context.Context, arg UpdateImportSheetStagingProgressParams) (ImportSheet, error) {
+	row := q.db.QueryRowContext(ctx, updateImportSheetStagingProgress,
+		arg.RowsFound,
+		arg.RowsStaged,
+		arg.UpdatedAt,
+		arg.SheetID,
+		arg.ImportID,
+		arg.LeaseOwner,
+		arg.Now,
 	)
 	var i ImportSheet
 	err := row.Scan(
