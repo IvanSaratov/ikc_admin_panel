@@ -1,14 +1,22 @@
 package app
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/api"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
 	"go.uber.org/zap"
 )
+
+type requestLogStateKey struct{}
+
+type requestLogState struct {
+	actor string
+}
 
 type statusRecorder struct {
 	http.ResponseWriter
@@ -49,8 +57,10 @@ func requestLogger(log *zap.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w}
+			state := &requestLogState{actor: audit.ActorFromContext(r.Context())}
+			ctx := context.WithValue(r.Context(), requestLogStateKey{}, state)
 
-			next.ServeHTTP(rec, r)
+			next.ServeHTTP(rec, r.WithContext(ctx))
 
 			fields := []zap.Field{
 				zap.String("method", r.Method),
@@ -59,12 +69,26 @@ func requestLogger(log *zap.Logger) func(http.Handler) http.Handler {
 				zap.Int64("duration_ms", time.Since(start).Milliseconds()),
 				zap.String("remote_ip", remoteIP(r)),
 			}
-			if actor := audit.ActorFromContext(r.Context()); actor != "" {
-				fields = append(fields, zap.String("actor", actor))
+			if traceID := api.TraceID(r.Context()); traceID != "" {
+				fields = append(fields, zap.String("trace_id", traceID))
+			}
+			if state.actor != "" {
+				fields = append(fields, zap.String("actor", state.actor))
 			}
 			log.Info("request", fields...)
 		})
 	}
+}
+
+// captureRequestLogActor passes an identity established by inner auth
+// middleware back to the outer request logger without exposing it in headers.
+func captureRequestLogActor(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if state, ok := r.Context().Value(requestLogStateKey{}).(*requestLogState); ok {
+			state.actor = audit.ActorFromContext(r.Context())
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // withActor переносит логин из auth-контекста в audit-контекст для аудита и логов.

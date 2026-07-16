@@ -105,10 +105,11 @@ func runServe(parent context.Context, resolved ResolvedServeConfig, logger *zap.
 			frontend.Assets = os.DirFS(frontendAssetsDir())
 		}
 		server, err := app.NewServer(app.ServerConfig{
-			Addr:     resolved.Address,
-			Sessions: admin.NewSessionManager(resolved.Session),
-			CSRF:     csrfMiddleware,
-			Frontend: frontend,
+			Addr:            resolved.Address,
+			Sessions:        admin.NewSessionManager(resolved.Session),
+			CSRF:            csrfMiddleware,
+			Frontend:        frontend,
+			ImportUploadDir: filepath.Join(filepath.Dir(ownedPath), "imports"),
 		}, database, logger)
 		if err != nil {
 			return err

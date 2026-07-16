@@ -286,6 +286,92 @@ func (q *Queries) FindExistingLegacyImportBySHA256(ctx context.Context, sourceSh
 	return i, err
 }
 
+const getImportAPI = `-- name: GetImportAPI :one
+SELECT
+  current_import.id,
+  current_import.profile,
+  current_import.source_file_name,
+  current_import.uploaded_by_actor,
+  current_import.received_at,
+  current_import.status,
+  current_import.phase,
+  current_import.rows_total,
+  current_import.rows_processed,
+  current_import.rows_applied,
+  current_import.rows_duplicate,
+  current_import.rows_needs_review,
+  current_import.error_code,
+  current_import.error_detail,
+  current_import.started_at,
+  current_import.staged_at,
+  current_import.completed_at,
+  current_import.created_at,
+  current_import.updated_at,
+  CASE
+    WHEN current_import.status = 'queued' THEN 1 + (
+      SELECT COUNT(*)
+      FROM imports AS ahead
+      WHERE ahead.id < current_import.id
+        AND ahead.status IN ('queued', 'processing')
+    )
+    ELSE 0
+  END AS queue_position
+FROM imports AS current_import
+WHERE current_import.id = ?
+LIMIT 1
+`
+
+type GetImportAPIRow struct {
+	ID              int64          `json:"id"`
+	Profile         string         `json:"profile"`
+	SourceFileName  sql.NullString `json:"source_file_name"`
+	UploadedByActor string         `json:"uploaded_by_actor"`
+	ReceivedAt      string         `json:"received_at"`
+	Status          string         `json:"status"`
+	Phase           sql.NullString `json:"phase"`
+	RowsTotal       int64          `json:"rows_total"`
+	RowsProcessed   int64          `json:"rows_processed"`
+	RowsApplied     int64          `json:"rows_applied"`
+	RowsDuplicate   int64          `json:"rows_duplicate"`
+	RowsNeedsReview int64          `json:"rows_needs_review"`
+	ErrorCode       sql.NullString `json:"error_code"`
+	ErrorDetail     sql.NullString `json:"error_detail"`
+	StartedAt       sql.NullString `json:"started_at"`
+	StagedAt        sql.NullString `json:"staged_at"`
+	CompletedAt     sql.NullString `json:"completed_at"`
+	CreatedAt       string         `json:"created_at"`
+	UpdatedAt       string         `json:"updated_at"`
+	QueuePosition   int64          `json:"queue_position"`
+}
+
+func (q *Queries) GetImportAPI(ctx context.Context, id int64) (GetImportAPIRow, error) {
+	row := q.db.QueryRowContext(ctx, getImportAPI, id)
+	var i GetImportAPIRow
+	err := row.Scan(
+		&i.ID,
+		&i.Profile,
+		&i.SourceFileName,
+		&i.UploadedByActor,
+		&i.ReceivedAt,
+		&i.Status,
+		&i.Phase,
+		&i.RowsTotal,
+		&i.RowsProcessed,
+		&i.RowsApplied,
+		&i.RowsDuplicate,
+		&i.RowsNeedsReview,
+		&i.ErrorCode,
+		&i.ErrorDetail,
+		&i.StartedAt,
+		&i.StagedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.QueuePosition,
+	)
+	return i, err
+}
+
 const getImportByID = `-- name: GetImportByID :one
 SELECT id, profile, source_file_name, source_sha256, source_size_bytes, idempotency_key, uploaded_by_actor, received_at, status, phase, temp_file_token, temp_file_expires_at, lease_owner, lease_expires_at, heartbeat_at, attempt, rows_total, rows_processed, rows_applied, rows_duplicate, rows_needs_review, error_code, error_detail, started_at, staged_at, completed_at, created_at, updated_at
 FROM imports
@@ -421,6 +507,114 @@ func (q *Queries) ListImportRows(ctx context.Context, importID int64) ([]ImportR
 			&i.RowNumber,
 			&i.RawData,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportsAPI = `-- name: ListImportsAPI :many
+SELECT
+  current_import.id,
+  current_import.profile,
+  current_import.source_file_name,
+  current_import.uploaded_by_actor,
+  current_import.received_at,
+  current_import.status,
+  current_import.phase,
+  current_import.rows_total,
+  current_import.rows_processed,
+  current_import.rows_applied,
+  current_import.rows_duplicate,
+  current_import.rows_needs_review,
+  current_import.error_code,
+  current_import.error_detail,
+  current_import.started_at,
+  current_import.staged_at,
+  current_import.completed_at,
+  current_import.created_at,
+  current_import.updated_at,
+  CASE
+    WHEN current_import.status = 'queued' THEN 1 + (
+      SELECT COUNT(*)
+      FROM imports AS ahead
+      WHERE ahead.id < current_import.id
+        AND ahead.status IN ('queued', 'processing')
+    )
+    ELSE 0
+  END AS queue_position
+FROM imports AS current_import
+WHERE current_import.id < ?1 OR ?1 = 0
+ORDER BY current_import.id DESC
+LIMIT ?2
+`
+
+type ListImportsAPIParams struct {
+	BeforeID int64 `json:"before_id"`
+	PageSize int64 `json:"page_size"`
+}
+
+type ListImportsAPIRow struct {
+	ID              int64          `json:"id"`
+	Profile         string         `json:"profile"`
+	SourceFileName  sql.NullString `json:"source_file_name"`
+	UploadedByActor string         `json:"uploaded_by_actor"`
+	ReceivedAt      string         `json:"received_at"`
+	Status          string         `json:"status"`
+	Phase           sql.NullString `json:"phase"`
+	RowsTotal       int64          `json:"rows_total"`
+	RowsProcessed   int64          `json:"rows_processed"`
+	RowsApplied     int64          `json:"rows_applied"`
+	RowsDuplicate   int64          `json:"rows_duplicate"`
+	RowsNeedsReview int64          `json:"rows_needs_review"`
+	ErrorCode       sql.NullString `json:"error_code"`
+	ErrorDetail     sql.NullString `json:"error_detail"`
+	StartedAt       sql.NullString `json:"started_at"`
+	StagedAt        sql.NullString `json:"staged_at"`
+	CompletedAt     sql.NullString `json:"completed_at"`
+	CreatedAt       string         `json:"created_at"`
+	UpdatedAt       string         `json:"updated_at"`
+	QueuePosition   int64          `json:"queue_position"`
+}
+
+func (q *Queries) ListImportsAPI(ctx context.Context, arg ListImportsAPIParams) ([]ListImportsAPIRow, error) {
+	rows, err := q.db.QueryContext(ctx, listImportsAPI, arg.BeforeID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListImportsAPIRow
+	for rows.Next() {
+		var i ListImportsAPIRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Profile,
+			&i.SourceFileName,
+			&i.UploadedByActor,
+			&i.ReceivedAt,
+			&i.Status,
+			&i.Phase,
+			&i.RowsTotal,
+			&i.RowsProcessed,
+			&i.RowsApplied,
+			&i.RowsDuplicate,
+			&i.RowsNeedsReview,
+			&i.ErrorCode,
+			&i.ErrorDetail,
+			&i.StartedAt,
+			&i.StagedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.QueuePosition,
 		); err != nil {
 			return nil, err
 		}

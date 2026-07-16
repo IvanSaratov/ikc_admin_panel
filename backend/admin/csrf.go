@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/api"
 	"github.com/gorilla/csrf"
 	"go.uber.org/zap"
 )
@@ -49,6 +51,17 @@ func NewCSRFMiddleware(config CSRFConfig, log *zap.Logger) (func(http.Handler) h
 		csrf.RequestHeader(csrfRequestHeader),
 		csrf.CookieName(csrfCookieName),
 		csrf.Path("/"),
+		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL != nil && strings.HasPrefix(r.URL.Path, "/api/") {
+				api.WriteProblem(w, r, api.Problem{
+					Status: http.StatusForbidden,
+					Code:   "csrf_failed",
+					Detail: "Проверка CSRF не пройдена",
+				})
+				return
+			}
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		})),
 	}
 	if len(config.TrustedOrigins) > 0 {
 		opts = append(opts, csrf.TrustedOrigins(config.TrustedOrigins))

@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/imports"
+	storagedb "github.com/IvanSaratov/ikc_admin_panel/backend/storage/db"
 	"github.com/alexedwards/scs/v2"
 	"go.uber.org/zap"
 )
@@ -20,10 +23,11 @@ type Server struct {
 }
 
 type ServerConfig struct {
-	Addr     string
-	Sessions *scs.SessionManager
-	CSRF     func(http.Handler) http.Handler
-	Frontend FrontendConfig
+	Addr            string
+	Sessions        *scs.SessionManager
+	CSRF            func(http.Handler) http.Handler
+	Frontend        FrontendConfig
+	ImportUploadDir string
 }
 
 type handlerLifecycle struct {
@@ -84,13 +88,36 @@ func NewServer(config ServerConfig, database *sql.DB, log *zap.Logger) (*Server,
 	// the multi-tenant deployment story lands.
 	loginRate := admin.NewRateLimiter(10, 5*time.Minute, nil)
 
+	var importService *imports.Service
+	if database != nil {
+		if config.ImportUploadDir == "" {
+			return nil, fmt.Errorf("import upload directory is required")
+		}
+		fileStore, err := imports.NewLocalFileStore(config.ImportUploadDir)
+		if err != nil {
+			return nil, fmt.Errorf("initialize import upload storage: %w", err)
+		}
+		queries := storagedb.New(database)
+		importService, err = imports.NewService(
+			database,
+			queries,
+			audit.NewService(queries),
+			fileStore,
+			imports.DefaultConfig(),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("initialize import service: %w", err)
+		}
+	}
+
 	handler := NewRouter(Deps{
-		Database:  database,
-		Sessions:  config.Sessions,
-		CSRF:      config.CSRF,
-		LoginRate: loginRate,
-		Log:       log,
-		Frontend:  config.Frontend,
+		Database:      database,
+		Sessions:      config.Sessions,
+		CSRF:          config.CSRF,
+		LoginRate:     loginRate,
+		Log:           log,
+		Frontend:      config.Frontend,
+		ImportService: importService,
 	})
 	handlers := newHandlerLifecycle(handler)
 

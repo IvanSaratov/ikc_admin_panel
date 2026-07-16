@@ -43,6 +43,48 @@ func TestAPIHandler_Session_Unauthenticated(t *testing.T) {
 	}
 }
 
+func TestAPIHandler_CSRF_ReturnsMaskedTokenAndCookie(t *testing.T) {
+	t.Parallel()
+
+	handler, sessions, _, _ := newTestHandler(t)
+	csrfMiddleware, err := admin.NewCSRFMiddleware(admin.CSRFConfig{
+		Key:       strings.Repeat("ab", 32),
+		Plaintext: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewCSRFMiddleware: %v", err)
+	}
+	mounted := sessions.LoadAndSave(csrfMiddleware(http.HandlerFunc(handler.GetCSRFJSON)))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "http://example.com/api/csrf", nil)
+	mounted.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Token string `json:"csrf_token"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Token == "" {
+		t.Fatal("empty CSRF token")
+	}
+	var foundCookie bool
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == "csrf_token" {
+			foundCookie = true
+			if !cookie.HttpOnly {
+				t.Fatal("CSRF cookie is not HttpOnly")
+			}
+		}
+	}
+	if !foundCookie {
+		t.Fatal("CSRF cookie not set")
+	}
+}
+
 func TestAPIHandler_LoginJSON_Success(t *testing.T) {
 	t.Parallel()
 

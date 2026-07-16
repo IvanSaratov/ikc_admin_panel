@@ -6,7 +6,9 @@ import (
 	"mime"
 	"net/http"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/api"
 	"github.com/IvanSaratov/ikc_admin_panel/backend/audit"
+	"github.com/gorilla/csrf"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +20,22 @@ type loginRequest struct {
 type sessionResponse struct {
 	Authenticated bool   `json:"authenticated"`
 	Login         string `json:"login,omitempty"`
+}
+
+// GetCSRFJSON returns the masked token produced by gorilla/csrf. The route is
+// authenticated and wrapped by CSRF middleware so the paired HttpOnly cookie
+// is set without exposing its raw value to JavaScript.
+func (h *Handler) GetCSRFJSON(w http.ResponseWriter, r *http.Request) {
+	token := csrf.Token(r)
+	if token == "" {
+		api.WriteProblem(w, r, api.Problem{
+			Status: http.StatusInternalServerError,
+			Code:   "internal_error",
+			Detail: "Не удалось подготовить CSRF token",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"csrf_token": token})
 }
 
 // GetSessionJSON reports the current session state for the React app.

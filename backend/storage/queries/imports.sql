@@ -45,6 +45,75 @@ WHERE id < sqlc.arg(before_id) OR sqlc.arg(before_id) = 0
 ORDER BY id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListImportsAPI :many
+SELECT
+  current_import.id,
+  current_import.profile,
+  current_import.source_file_name,
+  current_import.uploaded_by_actor,
+  current_import.received_at,
+  current_import.status,
+  current_import.phase,
+  current_import.rows_total,
+  current_import.rows_processed,
+  current_import.rows_applied,
+  current_import.rows_duplicate,
+  current_import.rows_needs_review,
+  current_import.error_code,
+  current_import.error_detail,
+  current_import.started_at,
+  current_import.staged_at,
+  current_import.completed_at,
+  current_import.created_at,
+  current_import.updated_at,
+  CASE
+    WHEN current_import.status = 'queued' THEN 1 + (
+      SELECT COUNT(*)
+      FROM imports AS ahead
+      WHERE ahead.id < current_import.id
+        AND ahead.status IN ('queued', 'processing')
+    )
+    ELSE 0
+  END AS queue_position
+FROM imports AS current_import
+WHERE current_import.id < sqlc.arg(before_id) OR sqlc.arg(before_id) = 0
+ORDER BY current_import.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: GetImportAPI :one
+SELECT
+  current_import.id,
+  current_import.profile,
+  current_import.source_file_name,
+  current_import.uploaded_by_actor,
+  current_import.received_at,
+  current_import.status,
+  current_import.phase,
+  current_import.rows_total,
+  current_import.rows_processed,
+  current_import.rows_applied,
+  current_import.rows_duplicate,
+  current_import.rows_needs_review,
+  current_import.error_code,
+  current_import.error_detail,
+  current_import.started_at,
+  current_import.staged_at,
+  current_import.completed_at,
+  current_import.created_at,
+  current_import.updated_at,
+  CASE
+    WHEN current_import.status = 'queued' THEN 1 + (
+      SELECT COUNT(*)
+      FROM imports AS ahead
+      WHERE ahead.id < current_import.id
+        AND ahead.status IN ('queued', 'processing')
+    )
+    ELSE 0
+  END AS queue_position
+FROM imports AS current_import
+WHERE current_import.id = ?
+LIMIT 1;
+
 -- name: CountImportsAhead :one
 SELECT COUNT(*)
 FROM imports

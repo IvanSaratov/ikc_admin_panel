@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IvanSaratov/ikc_admin_panel/backend/api"
 	"github.com/gorilla/csrf"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -280,5 +281,57 @@ func TestNewCSRFMiddleware_TrustedOrigins(t *testing.T) {
 	}
 	if mw == nil {
 		t.Fatal("NewCSRFMiddleware returned nil middleware")
+	}
+}
+
+func TestNewCSRFMiddlewareReturnsProblemJSONForAPIRequests(t *testing.T) {
+	mw, err := NewCSRFMiddleware(CSRFConfig{
+		Key:       strings.Repeat("ab", 32),
+		Plaintext: true,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("NewCSRFMiddleware: %v", err)
+	}
+	handler := api.TraceMiddleware(mw(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("request without CSRF token reached handler")
+	})))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "http://example.com/api/imports/legacy", nil)
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", recorder.Code)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/problem+json; charset=utf-8" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	body := recorder.Body.String()
+	for _, required := range []string{`"code":"csrf_failed"`, `"trace_id":"`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("problem body %q does not contain %q", body, required)
+		}
+	}
+}
+
+func TestNewCSRFMiddlewareKeepsLegacyFailureNonJSON(t *testing.T) {
+	mw, err := NewCSRFMiddleware(CSRFConfig{
+		Key:       strings.Repeat("ab", 32),
+		Plaintext: true,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("NewCSRFMiddleware: %v", err)
+	}
+	handler := mw(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("request without CSRF token reached handler")
+	}))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "http://example.com/login", nil)
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", recorder.Code)
+	}
+	if strings.Contains(recorder.Header().Get("Content-Type"), "json") {
+		t.Fatalf("legacy failure became JSON: %q", recorder.Header().Get("Content-Type"))
 	}
 }

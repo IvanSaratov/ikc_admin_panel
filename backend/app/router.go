@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/IvanSaratov/ikc_admin_panel/backend/admin"
+	"github.com/IvanSaratov/ikc_admin_panel/backend/imports"
 	"github.com/alexedwards/scs/v2"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -12,12 +13,13 @@ import (
 
 // Deps собирает зависимости времени выполнения для авторизации, CSRF и логов.
 type Deps struct {
-	Database  *sql.DB
-	Sessions  *scs.SessionManager
-	CSRF      func(http.Handler) http.Handler
-	LoginRate *admin.RateLimiter
-	Log       *zap.Logger
-	Frontend  FrontendConfig
+	Database      *sql.DB
+	Sessions      *scs.SessionManager
+	CSRF          func(http.Handler) http.Handler
+	LoginRate     *admin.RateLimiter
+	Log           *zap.Logger
+	Frontend      FrontendConfig
+	ImportService *imports.Service
 }
 
 // NewRouter собирает роутер с общей базой авторизации: Sessions.LoadAndSave
