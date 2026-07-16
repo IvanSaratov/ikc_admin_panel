@@ -51,6 +51,11 @@ FROM imports
 WHERE id < sqlc.arg(import_id)
   AND status IN ('queued', 'processing');
 
+-- name: CountActiveImports :one
+SELECT COUNT(*)
+FROM imports
+WHERE status IN ('queued', 'processing');
+
 -- name: ClaimNextImport :one
 UPDATE imports
 SET status = 'processing',

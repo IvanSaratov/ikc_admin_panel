@@ -87,6 +87,19 @@ func (q *Queries) ClaimNextImport(ctx context.Context, arg ClaimNextImportParams
 	return i, err
 }
 
+const countActiveImports = `-- name: CountActiveImports :one
+SELECT COUNT(*)
+FROM imports
+WHERE status IN ('queued', 'processing')
+`
+
+func (q *Queries) CountActiveImports(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveImports)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countImportsAhead = `-- name: CountImportsAhead :one
 SELECT COUNT(*)
 FROM imports
